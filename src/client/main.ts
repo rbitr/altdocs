@@ -224,6 +224,7 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
 
   editor = new Editor(editorEl, doc);
   toolbar = new Toolbar(toolbarEl, editor);
+  editor.onShortcutsToggle(() => toolbar!.toggleShortcutsPanel());
   lastSavedJSON = JSON.stringify(doc.blocks);
 
   // Auto-save on editor changes

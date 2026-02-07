@@ -306,6 +306,34 @@ describe('Toolbar - active state', () => {
   });
 });
 
+describe('Toolbar - shortcuts panel', () => {
+  it('renders a shortcuts button', () => {
+    const { toolbarEl } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));
+    const btn = getButton(toolbarEl, 'shortcuts');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toBe('?');
+    expect(btn.title).toContain('Keyboard Shortcuts');
+  });
+
+  it('clicking shortcuts button opens the panel', () => {
+    const { toolbar, toolbarEl } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));
+    const btn = getButton(toolbarEl, 'shortcuts');
+    btn.click();
+    const overlay = document.querySelector('.shortcuts-overlay');
+    expect(overlay).toBeTruthy();
+    // Clean up
+    toolbar.toggleShortcutsPanel();
+  });
+
+  it('toggleShortcutsPanel() method works', () => {
+    const { toolbar } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));
+    toolbar.toggleShortcutsPanel();
+    expect(document.querySelector('.shortcuts-overlay')).toBeTruthy();
+    toolbar.toggleShortcutsPanel();
+    expect(document.querySelector('.shortcuts-overlay')).toBeFalsy();
+  });
+});
+
 describe('Toolbar - undo/redo integration', () => {
   it('block type change can be undone', () => {
     const { editor, toolbarEl } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));

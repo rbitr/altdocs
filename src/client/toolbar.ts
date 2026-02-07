@@ -1,5 +1,6 @@
 import type { Editor } from './editor.js';
 import type { BlockType, Alignment } from '../shared/model.js';
+import { ShortcutsPanel } from './shortcuts-panel.js';
 
 interface ToolbarButton {
   element: HTMLButtonElement;
@@ -10,10 +11,12 @@ export class Toolbar {
   private container: HTMLElement;
   private editor: Editor;
   private buttons: Map<string, ToolbarButton> = new Map();
+  private shortcutsPanel: ShortcutsPanel;
 
   constructor(container: HTMLElement, editor: Editor) {
     this.container = container;
     this.editor = editor;
+    this.shortcutsPanel = new ShortcutsPanel();
     this.container.className = 'altdocs-toolbar';
     this.container.setAttribute('role', 'toolbar');
 
@@ -76,6 +79,14 @@ export class Toolbar {
     this.addButton(insertGroup, 'horizontal-rule', '—', 'Horizontal Rule', () => {
       this.editor.insertHorizontalRule();
       this.editor.focus();
+    });
+
+    this.addSeparator();
+
+    // Help group
+    const helpGroup = this.createGroup();
+    this.addButton(helpGroup, 'shortcuts', '?', 'Keyboard Shortcuts (Ctrl+/)', () => {
+      this.shortcutsPanel.toggle();
     });
   }
 
@@ -187,6 +198,11 @@ export class Toolbar {
     if (btn) {
       btn.element.classList.toggle('active', active);
     }
+  }
+
+  /** Toggle the keyboard shortcuts panel */
+  toggleShortcutsPanel(): void {
+    this.shortcutsPanel.toggle();
   }
 
   /** Get the toolbar container element */

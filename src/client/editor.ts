@@ -26,6 +26,7 @@ export class Editor {
   private container: HTMLElement;
   private rendering = false;
   private onUpdateCallbacks: Array<() => void> = [];
+  private onShortcutsPanelToggle: (() => void) | null = null;
 
   constructor(container: HTMLElement, doc?: Document) {
     this.container = container;
@@ -155,6 +156,12 @@ export class Editor {
           e.preventDefault();
           this.cursor = selectAll(this.doc);
           this.updateCursor();
+          return;
+        case '/':
+          e.preventDefault();
+          if (this.onShortcutsPanelToggle) {
+            this.onShortcutsPanelToggle();
+          }
           return;
       }
     }
@@ -727,6 +734,11 @@ export class Editor {
   /** Get the current cursor state (for external use) */
   getCursor(): CursorState {
     return this.cursor;
+  }
+
+  /** Register a callback for when the shortcuts panel toggle is requested (Ctrl+/) */
+  onShortcutsToggle(callback: () => void): void {
+    this.onShortcutsPanelToggle = callback;
   }
 
   /** Set the document and re-render */
