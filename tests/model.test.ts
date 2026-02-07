@@ -105,6 +105,32 @@ describe('helper functions', () => {
         stylesEqual({ bold: true, italic: true }, { bold: true, italic: true })
       ).toBe(true);
     });
+
+    it('detects different font sizes', () => {
+      expect(stylesEqual({ fontSize: 14 }, {})).toBe(false);
+      expect(stylesEqual({ fontSize: 14 }, { fontSize: 18 })).toBe(false);
+    });
+
+    it('matches identical font sizes', () => {
+      expect(stylesEqual({ fontSize: 14 }, { fontSize: 14 })).toBe(true);
+    });
+
+    it('treats undefined fontSize as equal to no fontSize', () => {
+      expect(stylesEqual({ fontSize: undefined }, {})).toBe(true);
+    });
+
+    it('detects different font families', () => {
+      expect(stylesEqual({ fontFamily: 'Arial' }, {})).toBe(false);
+      expect(stylesEqual({ fontFamily: 'Arial' }, { fontFamily: 'Georgia' })).toBe(false);
+    });
+
+    it('matches identical font families', () => {
+      expect(stylesEqual({ fontFamily: 'Arial' }, { fontFamily: 'Arial' })).toBe(true);
+    });
+
+    it('treats undefined fontFamily as equal to no fontFamily', () => {
+      expect(stylesEqual({ fontFamily: undefined }, {})).toBe(true);
+    });
   });
 
   describe('normalizeRuns', () => {
@@ -431,6 +457,68 @@ describe('apply_formatting operation', () => {
     });
     expect(doc.blocks[0].runs[0].style.bold).toBeFalsy();
   });
+
+  it('applies fontSize to a range', () => {
+    const doc = makeDoc([makeBlock('hello world')]);
+    const result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { fontSize: 24 },
+    });
+    expect(result.blocks[0].runs[0].text).toBe('hello');
+    expect(result.blocks[0].runs[0].style.fontSize).toBe(24);
+    expect(result.blocks[0].runs[1].text).toBe(' world');
+    expect(result.blocks[0].runs[1].style.fontSize).toBeUndefined();
+  });
+
+  it('applies fontFamily to a range', () => {
+    const doc = makeDoc([makeBlock('hello world')]);
+    const result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { fontFamily: 'Georgia' },
+    });
+    expect(result.blocks[0].runs[0].text).toBe('hello');
+    expect(result.blocks[0].runs[0].style.fontFamily).toBe('Georgia');
+    expect(result.blocks[0].runs[1].text).toBe(' world');
+    expect(result.blocks[0].runs[1].style.fontFamily).toBeUndefined();
+  });
+
+  it('applies fontSize and fontFamily together', () => {
+    const doc = makeDoc([makeBlock('hello')]);
+    const result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { fontSize: 18, fontFamily: 'Arial' },
+    });
+    expect(result.blocks[0].runs[0].style.fontSize).toBe(18);
+    expect(result.blocks[0].runs[0].style.fontFamily).toBe('Arial');
+  });
+
+  it('preserves fontSize when applying bold', () => {
+    const doc = makeDoc([
+      makeStyledBlock([{ text: 'hello', style: { fontSize: 24 } }]),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { bold: true },
+    });
+    expect(result.blocks[0].runs[0].style.bold).toBe(true);
+    expect(result.blocks[0].runs[0].style.fontSize).toBe(24);
+  });
 });
 
 describe('remove_formatting operation', () => {
@@ -469,6 +557,38 @@ describe('remove_formatting operation', () => {
     expect(result.blocks[0].runs[0].style.bold).toBe(false);
     expect(result.blocks[0].runs[0].style.italic).toBe(true);
     expect(result.blocks[0].runs[0].style.underline).toBe(true);
+  });
+
+  it('removes fontSize from a range', () => {
+    const doc = makeDoc([
+      makeStyledBlock([{ text: 'hello', style: { fontSize: 24, bold: true } }]),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'remove_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { fontSize: 0 },
+    });
+    expect(result.blocks[0].runs[0].style.fontSize).toBeUndefined();
+    expect(result.blocks[0].runs[0].style.bold).toBe(true);
+  });
+
+  it('removes fontFamily from a range', () => {
+    const doc = makeDoc([
+      makeStyledBlock([{ text: 'hello', style: { fontFamily: 'Arial', italic: true } }]),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'remove_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { fontFamily: '' },
+    });
+    expect(result.blocks[0].runs[0].style.fontFamily).toBeUndefined();
+    expect(result.blocks[0].runs[0].style.italic).toBe(true);
   });
 });
 

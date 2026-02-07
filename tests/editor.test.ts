@@ -342,6 +342,115 @@ describe('Editor - formatting shortcuts', () => {
   });
 });
 
+describe('Editor - font size and family', () => {
+  it('applies font size to selection', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello world')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.applyFontSize(24);
+    expect(editor.doc.blocks[0].runs[0].text).toBe('hello');
+    expect(editor.doc.blocks[0].runs[0].style.fontSize).toBe(24);
+    expect(editor.doc.blocks[0].runs[1].text).toBe(' world');
+    expect(editor.doc.blocks[0].runs[1].style.fontSize).toBeUndefined();
+  });
+
+  it('applies font family to selection', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello world')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.applyFontFamily('Georgia');
+    expect(editor.doc.blocks[0].runs[0].text).toBe('hello');
+    expect(editor.doc.blocks[0].runs[0].style.fontFamily).toBe('Georgia');
+    expect(editor.doc.blocks[0].runs[1].text).toBe(' world');
+    expect(editor.doc.blocks[0].runs[1].style.fontFamily).toBeUndefined();
+  });
+
+  it('does nothing when cursor is collapsed', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    editor.applyFontSize(24);
+    expect(editor.doc.blocks[0].runs[0].style.fontSize).toBeUndefined();
+  });
+
+  it('removes font size when undefined is passed', () => {
+    const editor = createEditor(
+      makeDoc([
+        {
+          id: 'b1',
+          type: 'paragraph',
+          alignment: 'left',
+          runs: [{ text: 'hello', style: { fontSize: 24 } }],
+        },
+      ])
+    );
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.applyFontSize(undefined);
+    expect(editor.doc.blocks[0].runs[0].style.fontSize).toBeUndefined();
+  });
+
+  it('removes font family when undefined is passed', () => {
+    const editor = createEditor(
+      makeDoc([
+        {
+          id: 'b1',
+          type: 'paragraph',
+          alignment: 'left',
+          runs: [{ text: 'hello', style: { fontFamily: 'Arial' } }],
+        },
+      ])
+    );
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.applyFontFamily(undefined);
+    expect(editor.doc.blocks[0].runs[0].style.fontFamily).toBeUndefined();
+  });
+
+  it('getActiveFontSize returns font size at cursor', () => {
+    const editor = createEditor(
+      makeDoc([
+        {
+          id: 'b1',
+          type: 'paragraph',
+          alignment: 'left',
+          runs: [{ text: 'hello', style: { fontSize: 18 } }],
+        },
+      ])
+    );
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    expect(editor.getActiveFontSize()).toBe(18);
+  });
+
+  it('getActiveFontFamily returns font family at cursor', () => {
+    const editor = createEditor(
+      makeDoc([
+        {
+          id: 'b1',
+          type: 'paragraph',
+          alignment: 'left',
+          runs: [{ text: 'hello', style: { fontFamily: 'Verdana' } }],
+        },
+      ])
+    );
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    expect(editor.getActiveFontFamily()).toBe('Verdana');
+  });
+
+  it('getActiveFontSize returns undefined for default text', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    expect(editor.getActiveFontSize()).toBeUndefined();
+  });
+});
+
 describe('Editor - complex sequences', () => {
   it('type, enter, type creates two blocks', () => {
     const editor = createEditor(makeDoc([makeBlock('')]));

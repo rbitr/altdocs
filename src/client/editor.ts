@@ -619,6 +619,48 @@ export class Editor {
     return false;
   }
 
+  /** Apply a font size to the current selection */
+  applyFontSize(size: number | undefined): void {
+    if (isCollapsed(this.cursor)) return;
+    this.pushHistory();
+    const range = getSelectionRange(this.cursor);
+    if (size === undefined) {
+      const op: Operation = { type: 'remove_formatting', range, style: { fontSize: 0 } };
+      this.doc = applyOperation(this.doc, op);
+    } else {
+      const op: Operation = { type: 'apply_formatting', range, style: { fontSize: size } };
+      this.doc = applyOperation(this.doc, op);
+    }
+    this.render();
+  }
+
+  /** Apply a font family to the current selection */
+  applyFontFamily(family: string | undefined): void {
+    if (isCollapsed(this.cursor)) return;
+    this.pushHistory();
+    const range = getSelectionRange(this.cursor);
+    if (family === undefined) {
+      const op: Operation = { type: 'remove_formatting', range, style: { fontFamily: '' } };
+      this.doc = applyOperation(this.doc, op);
+    } else {
+      const op: Operation = { type: 'apply_formatting', range, style: { fontFamily: family } };
+      this.doc = applyOperation(this.doc, op);
+    }
+    this.render();
+  }
+
+  /** Get the active font size at cursor position (or undefined for default) */
+  getActiveFontSize(): number | undefined {
+    const formatting = this.getActiveFormatting();
+    return formatting.fontSize;
+  }
+
+  /** Get the active font family at cursor position (or undefined for default) */
+  getActiveFontFamily(): string | undefined {
+    const formatting = this.getActiveFormatting();
+    return formatting.fontFamily;
+  }
+
   /** Change the block type of the block at the cursor */
   changeBlockType(newType: BlockType): void {
     this.pushHistory();

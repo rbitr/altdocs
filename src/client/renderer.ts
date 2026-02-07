@@ -28,6 +28,8 @@ function renderRun(run: TextRun, useCodeTag = false): HTMLElement {
       ? `${el.style.textDecoration} line-through`
       : 'line-through';
   }
+  if (run.style.fontSize) el.style.fontSize = `${run.style.fontSize}px`;
+  if (run.style.fontFamily) el.style.fontFamily = run.style.fontFamily;
 
   return el;
 }

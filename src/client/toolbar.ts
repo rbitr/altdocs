@@ -51,6 +51,13 @@ export class Toolbar {
 
     this.addSeparator();
 
+    // Font controls
+    const fontGroup = this.createGroup();
+    this.addFontSizeSelect(fontGroup);
+    this.addFontFamilySelect(fontGroup);
+
+    this.addSeparator();
+
     // Block type select
     const blockGroup = this.createGroup();
     this.addBlockTypeSelect(blockGroup);
@@ -169,6 +176,79 @@ export class Toolbar {
     parent.appendChild(select);
   }
 
+  private addFontSizeSelect(parent: HTMLElement): void {
+    const select = document.createElement('select');
+    select.className = 'toolbar-select';
+    select.title = 'Font size';
+    select.dataset.toolbarAction = 'font-size';
+
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'Size';
+    select.appendChild(defaultOpt);
+
+    const sizes = [8, 10, 12, 14, 18, 24, 36, 48];
+    for (const size of sizes) {
+      const option = document.createElement('option');
+      option.value = String(size);
+      option.textContent = String(size);
+      select.appendChild(option);
+    }
+
+    select.addEventListener('change', () => {
+      const val = select.value;
+      if (val === '') {
+        this.editor.applyFontSize(undefined);
+      } else {
+        this.editor.applyFontSize(Number(val));
+      }
+      this.editor.focus();
+    });
+
+    parent.appendChild(select);
+  }
+
+  private addFontFamilySelect(parent: HTMLElement): void {
+    const select = document.createElement('select');
+    select.className = 'toolbar-select';
+    select.title = 'Font family';
+    select.dataset.toolbarAction = 'font-family';
+
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'Font';
+    select.appendChild(defaultOpt);
+
+    const fonts = [
+      'Arial',
+      'Times New Roman',
+      'Courier New',
+      'Georgia',
+      'Verdana',
+      'Helvetica',
+      'Trebuchet MS',
+      'Comic Sans MS',
+    ];
+    for (const font of fonts) {
+      const option = document.createElement('option');
+      option.value = font;
+      option.textContent = font;
+      select.appendChild(option);
+    }
+
+    select.addEventListener('change', () => {
+      const val = select.value;
+      if (val === '') {
+        this.editor.applyFontFamily(undefined);
+      } else {
+        this.editor.applyFontFamily(val);
+      }
+      this.editor.focus();
+    });
+
+    parent.appendChild(select);
+  }
+
   updateActiveStates(): void {
     const formatting = this.editor.getActiveFormatting();
     const blockType = this.editor.getActiveBlockType();
@@ -190,6 +270,20 @@ export class Toolbar {
     const select = this.container.querySelector('[data-toolbar-action="block-type"]') as HTMLSelectElement | null;
     if (select) {
       select.value = blockType;
+    }
+
+    // Update font size select
+    const fontSizeSelect = this.container.querySelector('[data-toolbar-action="font-size"]') as HTMLSelectElement | null;
+    if (fontSizeSelect) {
+      const activeFontSize = this.editor.getActiveFontSize();
+      fontSizeSelect.value = activeFontSize ? String(activeFontSize) : '';
+    }
+
+    // Update font family select
+    const fontFamilySelect = this.container.querySelector('[data-toolbar-action="font-family"]') as HTMLSelectElement | null;
+    if (fontFamilySelect) {
+      const activeFontFamily = this.editor.getActiveFontFamily();
+      fontFamilySelect.value = activeFontFamily || '';
     }
   }
 

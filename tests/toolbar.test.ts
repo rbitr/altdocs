@@ -107,6 +107,29 @@ describe('Toolbar - rendering', () => {
     const { toolbarEl } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));
     expect(toolbarEl.getAttribute('role')).toBe('toolbar');
   });
+
+  it('renders font size select with preset sizes', () => {
+    const { toolbarEl } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));
+    const select = toolbarEl.querySelector('[data-toolbar-action="font-size"]') as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    const values = Array.from(select.options).map(o => o.value);
+    expect(values).toContain('');
+    expect(values).toContain('12');
+    expect(values).toContain('24');
+    expect(values).toContain('48');
+  });
+
+  it('renders font family select with web-safe fonts', () => {
+    const { toolbarEl } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));
+    const select = toolbarEl.querySelector('[data-toolbar-action="font-family"]') as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    const values = Array.from(select.options).map(o => o.value);
+    expect(values).toContain('');
+    expect(values).toContain('Arial');
+    expect(values).toContain('Times New Roman');
+    expect(values).toContain('Courier New');
+    expect(values).toContain('Georgia');
+  });
 });
 
 describe('Toolbar - formatting actions', () => {
@@ -303,6 +326,77 @@ describe('Toolbar - active state', () => {
     select.value = 'heading2';
     select.dispatchEvent(new Event('change'));
     expect(select.value).toBe('heading2');
+  });
+});
+
+describe('Toolbar - font size and family actions', () => {
+  it('changing font size select applies font size to selection', () => {
+    const { editor, toolbarEl } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    const select = toolbarEl.querySelector('[data-toolbar-action="font-size"]') as HTMLSelectElement;
+    select.value = '24';
+    select.dispatchEvent(new Event('change'));
+    expect(editor.doc.blocks[0].runs[0].style.fontSize).toBe(24);
+  });
+
+  it('changing font family select applies font family to selection', () => {
+    const { editor, toolbarEl } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    const select = toolbarEl.querySelector('[data-toolbar-action="font-family"]') as HTMLSelectElement;
+    select.value = 'Georgia';
+    select.dispatchEvent(new Event('change'));
+    expect(editor.doc.blocks[0].runs[0].style.fontFamily).toBe('Georgia');
+  });
+
+  it('font size select reflects current font size', () => {
+    const { toolbarEl } = createEditorAndToolbar(makeDoc([{
+      id: 'b1',
+      type: 'paragraph',
+      alignment: 'left',
+      runs: [{ text: 'hello', style: { fontSize: 18 } }],
+    }]));
+    const select = toolbarEl.querySelector('[data-toolbar-action="font-size"]') as HTMLSelectElement;
+    expect(select.value).toBe('18');
+  });
+
+  it('font family select reflects current font family', () => {
+    const { toolbarEl } = createEditorAndToolbar(makeDoc([{
+      id: 'b1',
+      type: 'paragraph',
+      alignment: 'left',
+      runs: [{ text: 'hello', style: { fontFamily: 'Georgia' } }],
+    }]));
+    const select = toolbarEl.querySelector('[data-toolbar-action="font-family"]') as HTMLSelectElement;
+    expect(select.value).toBe('Georgia');
+  });
+
+  it('font size select shows default when no font size set', () => {
+    const { toolbarEl } = createEditorAndToolbar(makeDoc([makeBlock('hello')]));
+    const select = toolbarEl.querySelector('[data-toolbar-action="font-size"]') as HTMLSelectElement;
+    expect(select.value).toBe('');
+  });
+
+  it('resetting font size to default clears the value', () => {
+    const { editor, toolbarEl } = createEditorAndToolbar(makeDoc([{
+      id: 'b1',
+      type: 'paragraph',
+      alignment: 'left',
+      runs: [{ text: 'hello', style: { fontSize: 24 } }],
+    }]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    const select = toolbarEl.querySelector('[data-toolbar-action="font-size"]') as HTMLSelectElement;
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    expect(editor.doc.blocks[0].runs[0].style.fontSize).toBeUndefined();
   });
 });
 

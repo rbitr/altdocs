@@ -252,6 +252,56 @@ describe('renderDocument', () => {
       expect(span!.style.fontStyle).toBe('');
       expect(span!.style.textDecoration).toBe('');
     });
+
+    it('renders text with fontSize', () => {
+      const doc = makeDoc([
+        makeStyledBlock([{ text: 'big text', style: { fontSize: 24 } }]),
+      ]);
+      renderDocument(doc, container);
+      const span = container.querySelector('span');
+      expect(span!.style.fontSize).toBe('24px');
+    });
+
+    it('renders text with fontFamily', () => {
+      const doc = makeDoc([
+        makeStyledBlock([{ text: 'styled', style: { fontFamily: 'Georgia' } }]),
+      ]);
+      renderDocument(doc, container);
+      const span = container.querySelector('span');
+      expect(span!.style.fontFamily).toBe('Georgia');
+    });
+
+    it('renders text with both fontSize and fontFamily', () => {
+      const doc = makeDoc([
+        makeStyledBlock([{ text: 'styled', style: { fontSize: 18, fontFamily: 'Arial' } }]),
+      ]);
+      renderDocument(doc, container);
+      const span = container.querySelector('span');
+      expect(span!.style.fontSize).toBe('18px');
+      expect(span!.style.fontFamily).toBe('Arial');
+    });
+
+    it('does not set fontSize for unstyled text', () => {
+      const doc = makeDoc([
+        makeStyledBlock([{ text: 'plain', style: {} }]),
+      ]);
+      renderDocument(doc, container);
+      const span = container.querySelector('span');
+      expect(span!.style.fontSize).toBe('');
+    });
+
+    it('renders mixed font size runs', () => {
+      const doc = makeDoc([
+        makeStyledBlock([
+          { text: 'normal ', style: {} },
+          { text: 'big', style: { fontSize: 36 } },
+        ]),
+      ]);
+      renderDocument(doc, container);
+      const spans = container.querySelectorAll('span');
+      expect(spans[0].style.fontSize).toBe('');
+      expect(spans[1].style.fontSize).toBe('36px');
+    });
   });
 
   describe('re-rendering', () => {

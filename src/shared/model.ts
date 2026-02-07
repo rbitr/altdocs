@@ -21,6 +21,8 @@ export interface TextStyle {
   underline?: boolean;
   strikethrough?: boolean;
   code?: boolean;
+  fontSize?: number;
+  fontFamily?: string;
 }
 
 export interface TextRun {
@@ -144,7 +146,9 @@ export function stylesEqual(a: TextStyle, b: TextStyle): boolean {
     !!a.italic === !!b.italic &&
     !!a.underline === !!b.underline &&
     !!a.strikethrough === !!b.strikethrough &&
-    !!a.code === !!b.code
+    !!a.code === !!b.code &&
+    (a.fontSize || undefined) === (b.fontSize || undefined) &&
+    (a.fontFamily || undefined) === (b.fontFamily || undefined)
   );
 }
 
@@ -157,6 +161,8 @@ function applyStyleDelta(base: TextStyle, delta: Partial<TextStyle>): TextStyle 
     strikethrough:
       delta.strikethrough !== undefined ? delta.strikethrough : base.strikethrough,
     code: delta.code !== undefined ? delta.code : base.code,
+    fontSize: delta.fontSize !== undefined ? delta.fontSize : base.fontSize,
+    fontFamily: delta.fontFamily !== undefined ? delta.fontFamily : base.fontFamily,
   };
 }
 
@@ -168,6 +174,8 @@ function removeStyleDelta(base: TextStyle, delta: Partial<TextStyle>): TextStyle
     underline: delta.underline !== undefined ? false : base.underline,
     strikethrough: delta.strikethrough !== undefined ? false : base.strikethrough,
     code: delta.code !== undefined ? false : base.code,
+    fontSize: delta.fontSize !== undefined ? undefined : base.fontSize,
+    fontFamily: delta.fontFamily !== undefined ? undefined : base.fontFamily,
   };
 }
 
