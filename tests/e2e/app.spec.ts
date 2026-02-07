@@ -1,54 +1,47 @@
 import { test, expect } from '@playwright/test';
 
+const docUrl = '/#/doc/e2e-app-test';
+
 test('page loads with AltDocs title', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('AltDocs');
 });
 
-test('page displays AltDocs heading in editor', async ({ page }) => {
+test('document list page shows header and new document button', async ({ page }) => {
   await page.goto('/');
-  const heading = page.locator('.altdocs-editor h1');
-  await expect(heading).toHaveText('AltDocs');
+  await page.waitForSelector('.doc-list-header');
+  await expect(page.locator('.doc-list-header h1')).toHaveText('AltDocs');
+  await expect(page.locator('.new-doc-btn')).toBeVisible();
 });
 
 test('editor container is visible and contenteditable', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(docUrl);
   const editor = page.locator('.altdocs-editor');
   await expect(editor).toBeVisible();
   await expect(editor).toHaveAttribute('contenteditable', 'true');
 });
 
-test('renders formatted text with bold', async ({ page }) => {
-  await page.goto('/');
-  const boldSpan = page.locator('.altdocs-editor p span').nth(1);
-  await expect(boldSpan).toHaveText('from-scratch');
-  await expect(boldSpan).toHaveCSS('font-weight', '700');
-});
-
 test('typing inserts text into the editor', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(docUrl);
   await page.waitForSelector('.altdocs-editor[contenteditable="true"]');
 
-  // Click on the empty third paragraph to position cursor there
-  const lastP = page.locator('.altdocs-editor p').last();
-  await lastP.click();
+  const firstP = page.locator('.altdocs-editor p').first();
+  await firstP.click();
   await page.waitForTimeout(50);
 
-  // Type some text
   await page.keyboard.type('Hello from Playwright');
 
-  // Verify the text appears in the last paragraph
-  await expect(lastP).toContainText('Hello from Playwright');
+  await expect(firstP).toContainText('Hello from Playwright');
 });
 
 test('Enter key creates a new block', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(docUrl);
   await page.waitForSelector('.altdocs-editor[contenteditable="true"]');
 
   const initialCount = await page.locator('.altdocs-editor p').count();
 
-  const lastP = page.locator('.altdocs-editor p').last();
-  await lastP.click();
+  const firstP = page.locator('.altdocs-editor p').first();
+  await firstP.click();
   await page.waitForTimeout(50);
 
   await page.keyboard.type('First line');
@@ -60,15 +53,15 @@ test('Enter key creates a new block', async ({ page }) => {
 });
 
 test('Backspace deletes a character', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(docUrl);
   await page.waitForSelector('.altdocs-editor[contenteditable="true"]');
 
-  const lastP = page.locator('.altdocs-editor p').last();
-  await lastP.click();
+  const firstP = page.locator('.altdocs-editor p').first();
+  await firstP.click();
   await page.waitForTimeout(50);
 
   await page.keyboard.type('abc');
   await page.keyboard.press('Backspace');
 
-  await expect(page.locator('.altdocs-editor p').last()).toContainText('ab');
+  await expect(page.locator('.altdocs-editor p').first()).toContainText('ab');
 });

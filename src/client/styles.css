@@ -140,3 +140,90 @@ body {
 .altdocs-editor li {
   margin-bottom: 0.25em;
 }
+
+/* Status bar */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  margin-bottom: 8px;
+}
+
+.back-link {
+  color: #555;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.back-link:hover {
+  color: #111;
+  text-decoration: underline;
+}
+
+#save-status {
+  font-size: 13px;
+  color: #888;
+}
+
+/* Document list */
+.doc-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.doc-list-header h1 {
+  font-size: 1.75rem;
+}
+
+.new-doc-btn {
+  padding: 8px 16px;
+  background: #4a90d9;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.new-doc-btn:hover {
+  background: #357abd;
+}
+
+.doc-list {
+  list-style: none;
+}
+
+.doc-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.doc-list-item a {
+  color: #333;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.doc-list-item a:hover {
+  color: #4a90d9;
+}
+
+.doc-list-date {
+  font-size: 13px;
+  color: #999;
+}
+
+.doc-list-empty {
+  color: #888;
+  text-align: center;
+  padding: 2rem;
+}

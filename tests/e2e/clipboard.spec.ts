@@ -5,17 +5,18 @@ test.use({
   permissions: ['clipboard-read', 'clipboard-write'],
 });
 
+const docUrl = '/#/doc/e2e-clipboard-test';
 const editorSelector = '.altdocs-editor';
 
 async function focusEditor(page: any) {
   await page.waitForSelector(`${editorSelector}[contenteditable="true"]`);
-  const lastP = page.locator(`${editorSelector} p`).last();
-  await lastP.click();
+  const firstP = page.locator(`${editorSelector} p`).first();
+  await firstP.click();
   await page.waitForTimeout(50);
 }
 
 test('copy and paste text within editor', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(docUrl);
   await focusEditor(page);
 
   // Type some text
@@ -37,12 +38,12 @@ test('copy and paste text within editor', async ({ page }) => {
   await page.keyboard.press('Control+v');
 
   // Should now be "hello worldhello"
-  const lastP = page.locator(`${editorSelector} p`).last();
-  await expect(lastP).toContainText('hello worldhello');
+  const firstP = page.locator(`${editorSelector} p`).first();
+  await expect(firstP).toContainText('hello worldhello');
 });
 
 test('cut removes text and allows paste', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(docUrl);
   await focusEditor(page);
 
   // Type text
@@ -57,19 +58,19 @@ test('cut removes text and allows paste', async ({ page }) => {
   await page.keyboard.press('Control+x');
 
   // The text should now just be "hello "
-  const lastP = page.locator(`${editorSelector} p`).last();
-  await expect(lastP).toContainText('hello ');
+  const firstP = page.locator(`${editorSelector} p`).first();
+  await expect(firstP).toContainText('hello ');
 
   // Move to beginning and paste
   await page.keyboard.press('Home');
   await page.keyboard.press('Control+v');
 
   // Should now be "worldhello "
-  await expect(lastP).toContainText('worldhello ');
+  await expect(firstP).toContainText('worldhello ');
 });
 
 test('paste multi-line text creates new blocks', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(docUrl);
   await focusEditor(page);
 
   // Type some text in the first line
@@ -81,9 +82,9 @@ test('paste multi-line text creates new blocks', async ({ page }) => {
   await page.keyboard.press('Enter');
   await page.keyboard.type('end');
 
-  // Count the paragraphs — should have the initial blocks + the 3 we added
-  const initialParagraphs = await page.locator(`${editorSelector} p`).count();
-  expect(initialParagraphs).toBeGreaterThanOrEqual(3);
+  // Count the paragraphs — should have the 3 we added
+  const paragraphCount = await page.locator(`${editorSelector} p`).count();
+  expect(paragraphCount).toBeGreaterThanOrEqual(3);
 
   // Verify text content
   const allText = await page.locator(editorSelector).innerText();
@@ -93,7 +94,7 @@ test('paste multi-line text creates new blocks', async ({ page }) => {
 });
 
 test('copy with no selection does not affect clipboard paste', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(docUrl);
   await focusEditor(page);
 
   await page.keyboard.type('hello');
@@ -104,12 +105,12 @@ test('copy with no selection does not affect clipboard paste', async ({ page }) 
 
   // Typing should still work fine
   await page.keyboard.type(' world');
-  const lastP = page.locator(`${editorSelector} p`).last();
-  await expect(lastP).toContainText('hello world');
+  const firstP = page.locator(`${editorSelector} p`).first();
+  await expect(firstP).toContainText('hello world');
 });
 
 test('undo after paste restores previous state', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(docUrl);
   await focusEditor(page);
 
   await page.keyboard.type('hello');
@@ -128,12 +129,12 @@ test('undo after paste restores previous state', async ({ page }) => {
   // Paste at end
   await page.keyboard.press('Control+v');
 
-  const lastP = page.locator(`${editorSelector} p`).last();
-  await expect(lastP).toContainText('hellohello');
+  const firstP = page.locator(`${editorSelector} p`).first();
+  await expect(firstP).toContainText('hellohello');
 
   // Undo the paste
   await page.keyboard.press('Control+z');
 
   // Should be back to "hello"
-  await expect(lastP).toHaveText('hello');
+  await expect(firstP).toHaveText('hello');
 });
