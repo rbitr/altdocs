@@ -15,12 +15,14 @@ import {
   moveToDocEnd,
   selectAll,
 } from '../shared/cursor.js';
+import { HistoryManager } from '../shared/history.js';
 import { renderDocument } from './renderer.js';
 import { applyCursorToDOM, readCursorFromDOM, resolveDocumentPosition } from './cursor-renderer.js';
 
 export class Editor {
   public doc: Document;
   public cursor: CursorState;
+  public history: HistoryManager;
   private container: HTMLElement;
   private rendering = false;
 
@@ -28,6 +30,7 @@ export class Editor {
     this.container = container;
     this.doc = doc || createEmptyDocument('new-doc', 'Untitled');
     this.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    this.history = new HistoryManager();
 
     this.container.setAttribute('contenteditable', 'true');
     this.container.setAttribute('spellcheck', 'false');
@@ -79,6 +82,22 @@ export class Editor {
   handleKeyDown(e: KeyboardEvent): void {
     const ctrl = e.ctrlKey || e.metaKey;
     const shift = e.shiftKey;
+
+    // Undo/Redo
+    if (ctrl && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      if (shift) {
+        this.redo();
+      } else {
+        this.undo();
+      }
+      return;
+    }
+    if (ctrl && e.key.toLowerCase() === 'y') {
+      e.preventDefault();
+      this.redo();
+      return;
+    }
 
     // Formatting shortcuts
     if (ctrl && !shift) {
@@ -187,7 +206,31 @@ export class Editor {
     // Other input types (insertParagraph, etc.) are handled by keydown
   }
 
+  private pushHistory(): void {
+    this.history.push({ doc: this.doc, cursor: this.cursor });
+  }
+
+  undo(): void {
+    const entry = this.history.undo({ doc: this.doc, cursor: this.cursor });
+    if (entry) {
+      this.doc = entry.doc;
+      this.cursor = entry.cursor;
+      this.render();
+    }
+  }
+
+  redo(): void {
+    const entry = this.history.redo({ doc: this.doc, cursor: this.cursor });
+    if (entry) {
+      this.doc = entry.doc;
+      this.cursor = entry.cursor;
+      this.render();
+    }
+  }
+
   insertText(text: string): void {
+    this.pushHistory();
+
     // If there's a selection, delete it first
     if (!isCollapsed(this.cursor)) {
       this.deleteSelection();
@@ -210,6 +253,8 @@ export class Editor {
   }
 
   private handleBackspace(): void {
+    this.pushHistory();
+
     if (!isCollapsed(this.cursor)) {
       this.deleteSelection();
       this.render();
@@ -250,6 +295,8 @@ export class Editor {
   }
 
   private handleDelete(): void {
+    this.pushHistory();
+
     if (!isCollapsed(this.cursor)) {
       this.deleteSelection();
       this.render();
@@ -284,6 +331,8 @@ export class Editor {
   }
 
   private handleEnter(): void {
+    this.pushHistory();
+
     // If there's a selection, delete it first
     if (!isCollapsed(this.cursor)) {
       this.deleteSelection();
@@ -316,6 +365,8 @@ export class Editor {
 
   toggleFormatting(style: Partial<TextStyle>): void {
     if (isCollapsed(this.cursor)) return; // No selection to format
+
+    this.pushHistory();
 
     const range = getSelectionRange(this.cursor);
 

@@ -378,3 +378,130 @@ describe('Editor - complex sequences', () => {
     expect(getBlockText(editor, 0)).toBe('replaced');
   });
 });
+
+describe('Editor - undo/redo', () => {
+  it('undoes text insertion', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.insertText(' world');
+    expect(getBlockText(editor, 0)).toBe('hello world');
+
+    editor.undo();
+    expect(getBlockText(editor, 0)).toBe('hello');
+  });
+
+  it('redoes after undo', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.insertText(' world');
+    editor.undo();
+    expect(getBlockText(editor, 0)).toBe('hello');
+
+    editor.redo();
+    expect(getBlockText(editor, 0)).toBe('hello world');
+  });
+
+  it('undoes backspace', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.handleKeyDown(makeKeyEvent('Backspace'));
+    expect(getBlockText(editor, 0)).toBe('hell');
+
+    editor.undo();
+    expect(getBlockText(editor, 0)).toBe('hello');
+  });
+
+  it('undoes enter (split block)', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello world')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.handleKeyDown(makeKeyEvent('Enter'));
+    expect(editor.doc.blocks).toHaveLength(2);
+
+    editor.undo();
+    expect(editor.doc.blocks).toHaveLength(1);
+    expect(getBlockText(editor, 0)).toBe('hello world');
+  });
+
+  it('undoes formatting', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.handleKeyDown(makeKeyEvent('b', { ctrlKey: true }));
+    expect(editor.doc.blocks[0].runs[0].style.bold).toBe(true);
+
+    editor.undo();
+    expect(editor.doc.blocks[0].runs[0].style.bold).toBeFalsy();
+  });
+
+  it('Ctrl+Z triggers undo', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.insertText('!');
+    expect(getBlockText(editor, 0)).toBe('hello!');
+
+    editor.handleKeyDown(makeKeyEvent('z', { ctrlKey: true }));
+    expect(getBlockText(editor, 0)).toBe('hello');
+  });
+
+  it('Ctrl+Shift+Z triggers redo', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.insertText('!');
+    editor.handleKeyDown(makeKeyEvent('z', { ctrlKey: true }));
+    expect(getBlockText(editor, 0)).toBe('hello');
+
+    editor.handleKeyDown(makeKeyEvent('z', { ctrlKey: true, shiftKey: true }));
+    expect(getBlockText(editor, 0)).toBe('hello!');
+  });
+
+  it('Ctrl+Y triggers redo', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.insertText('!');
+    editor.handleKeyDown(makeKeyEvent('z', { ctrlKey: true }));
+
+    editor.handleKeyDown(makeKeyEvent('y', { ctrlKey: true }));
+    expect(getBlockText(editor, 0)).toBe('hello!');
+  });
+
+  it('new operation clears redo stack', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+
+    editor.insertText('!');
+    editor.undo();
+    expect(editor.history.canRedo()).toBe(true);
+
+    editor.insertText('?');
+    expect(editor.history.canRedo()).toBe(false);
+  });
+
+  it('multiple undos restore to original state', () => {
+    const editor = createEditor(makeDoc([makeBlock('')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+
+    editor.insertText('a');
+    editor.insertText('b');
+    editor.insertText('c');
+    expect(getBlockText(editor, 0)).toBe('abc');
+
+    editor.undo();
+    expect(getBlockText(editor, 0)).toBe('ab');
+    editor.undo();
+    expect(getBlockText(editor, 0)).toBe('a');
+    editor.undo();
+    expect(getBlockText(editor, 0)).toBe('');
+  });
+
+  it('restores cursor position on undo', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.insertText(' world');
+    expect(editor.cursor.focus.offset).toBe(11);
+
+    editor.undo();
+    expect(editor.cursor.focus.offset).toBe(5);
+  });
+});
