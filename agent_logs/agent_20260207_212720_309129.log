@@ -1,0 +1,15 @@
+=== Starting agent run at Sat Feb  7 09:27:20 PM UTC 2026 on commit 309129 ===
+Task 012 is complete. Here's a summary of what was done:
+
+**Task 012: Text Selection and Keyboard Shortcuts E2E Tests**
+
+Added **15 new Playwright e2e tests** (bringing the total from 24 to 39) covering three areas that previously lacked browser test coverage:
+
+1. **Text Selection (4 tests)**: Shift+Arrow multi-character selection, Ctrl+A select all with type-to-replace, select all + delete, and selection replacement by typing
+2. **Keyboard Formatting Shortcuts (5 tests)**: Ctrl+B bold, Ctrl+I italic, Ctrl+U underline, Ctrl+D strikethrough, and bold toggle off — all verified both in DOM styling and toolbar active state
+3. **Home/End Navigation (6 tests)**: Home, End, Ctrl+Home, Ctrl+End for cursor positioning, plus Shift+Home and Shift+End for selection extending
+
+**Bug fix**: Fixed `getActiveFormatting()` in `src/client/editor.ts` — when text was selected backwards (via Shift+ArrowLeft), the toolbar was reading formatting at the wrong position (focus at the selection boundary instead of anchor within the formatted content). Documented in `decisions/012`.
+
+**All tests pass**: 284 unit + 39 e2e.
+=== Agent run completed successfully at Sat Feb  7 09:35:16 PM UTC 2026 ===

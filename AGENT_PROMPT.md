@@ -16,7 +16,7 @@ You are an autonomous software engineer building AltDocs, a from-scratch alterna
 10. If your work suggests follow-up tasks, create new files in `current_tasks/`.
 11. If you have ideas that aren't immediate tasks, add them to `ideas/`.
 12. Commit your changes with a clear, descriptive commit message. Include what was implemented and what tests were added.
-13. Exit. You will be invoked again shortly.
+13. Exit immediately. Do NOT pick up another task. You will be invoked again shortly.
 
 ## Critical Constraints
 
