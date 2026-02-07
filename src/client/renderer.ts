@@ -9,27 +9,38 @@ const BLOCK_TAG_MAP: Record<BlockType, string> = {
   'heading3': 'h3',
   'bullet-list-item': 'li',
   'numbered-list-item': 'li',
+  'blockquote': 'blockquote',
+  'code-block': 'pre',
+  'horizontal-rule': 'hr',
 };
 
 /** Render a single text run to a DOM element */
-function renderRun(run: TextRun): HTMLElement {
-  const span = document.createElement('span');
-  span.textContent = run.text;
+function renderRun(run: TextRun, useCodeTag = false): HTMLElement {
+  const tagName = (run.style.code || useCodeTag) ? 'code' : 'span';
+  const el = document.createElement(tagName);
+  el.textContent = run.text;
 
-  if (run.style.bold) span.style.fontWeight = 'bold';
-  if (run.style.italic) span.style.fontStyle = 'italic';
-  if (run.style.underline) span.style.textDecoration = 'underline';
+  if (run.style.bold) el.style.fontWeight = 'bold';
+  if (run.style.italic) el.style.fontStyle = 'italic';
+  if (run.style.underline) el.style.textDecoration = 'underline';
   if (run.style.strikethrough) {
-    span.style.textDecoration = span.style.textDecoration
-      ? `${span.style.textDecoration} line-through`
+    el.style.textDecoration = el.style.textDecoration
+      ? `${el.style.textDecoration} line-through`
       : 'line-through';
   }
 
-  return span;
+  return el;
 }
 
 /** Render a single block to a DOM element */
 function renderBlock(block: Block): HTMLElement {
+  // Horizontal rules are self-closing — render as <hr> with no content
+  if (block.type === 'horizontal-rule') {
+    const el = document.createElement('hr');
+    el.dataset.blockId = block.id;
+    return el;
+  }
+
   const tag = BLOCK_TAG_MAP[block.type] || 'p';
   const el = document.createElement(tag);
 
@@ -40,9 +51,26 @@ function renderBlock(block: Block): HTMLElement {
   }
 
   const isEmpty = blockTextLength(block) === 0;
+  const isCodeBlock = block.type === 'code-block';
+
   if (isEmpty) {
     // Empty blocks need a <br> to be visible and allow caret placement
-    el.appendChild(document.createElement('br'));
+    if (isCodeBlock) {
+      const code = document.createElement('code');
+      code.appendChild(document.createElement('br'));
+      el.appendChild(code);
+    } else {
+      el.appendChild(document.createElement('br'));
+    }
+  } else if (isCodeBlock) {
+    // Code blocks: wrap all runs in a single <code> element
+    const code = document.createElement('code');
+    for (const run of block.runs) {
+      const span = document.createElement('span');
+      span.textContent = run.text;
+      code.appendChild(span);
+    }
+    el.appendChild(code);
   } else {
     for (const run of block.runs) {
       el.appendChild(renderRun(run));

@@ -8,7 +8,10 @@ export type BlockType =
   | 'heading2'
   | 'heading3'
   | 'bullet-list-item'
-  | 'numbered-list-item';
+  | 'numbered-list-item'
+  | 'blockquote'
+  | 'code-block'
+  | 'horizontal-rule';
 
 export type Alignment = 'left' | 'center' | 'right';
 
@@ -17,6 +20,7 @@ export interface TextStyle {
   italic?: boolean;
   underline?: boolean;
   strikethrough?: boolean;
+  code?: boolean;
 }
 
 export interface TextRun {
@@ -102,6 +106,12 @@ export interface ChangeBlockAlignmentOp {
   newAlignment: Alignment;
 }
 
+export interface InsertBlockOp {
+  type: 'insert_block';
+  afterBlockIndex: number;
+  blockType: BlockType;
+}
+
 export type Operation =
   | InsertTextOp
   | DeleteTextOp
@@ -110,7 +120,8 @@ export type Operation =
   | SplitBlockOp
   | MergeBlockOp
   | ChangeBlockTypeOp
-  | ChangeBlockAlignmentOp;
+  | ChangeBlockAlignmentOp
+  | InsertBlockOp;
 
 // ============================================================
 // Helper Functions
@@ -132,7 +143,8 @@ export function stylesEqual(a: TextStyle, b: TextStyle): boolean {
     !!a.bold === !!b.bold &&
     !!a.italic === !!b.italic &&
     !!a.underline === !!b.underline &&
-    !!a.strikethrough === !!b.strikethrough
+    !!a.strikethrough === !!b.strikethrough &&
+    !!a.code === !!b.code
   );
 }
 
@@ -144,6 +156,7 @@ function applyStyleDelta(base: TextStyle, delta: Partial<TextStyle>): TextStyle 
     underline: delta.underline !== undefined ? delta.underline : base.underline,
     strikethrough:
       delta.strikethrough !== undefined ? delta.strikethrough : base.strikethrough,
+    code: delta.code !== undefined ? delta.code : base.code,
   };
 }
 
@@ -154,6 +167,7 @@ function removeStyleDelta(base: TextStyle, delta: Partial<TextStyle>): TextStyle
     italic: delta.italic !== undefined ? false : base.italic,
     underline: delta.underline !== undefined ? false : base.underline,
     strikethrough: delta.strikethrough !== undefined ? false : base.strikethrough,
+    code: delta.code !== undefined ? false : base.code,
   };
 }
 
@@ -277,6 +291,8 @@ export function applyOperation(doc: Document, op: Operation): Document {
       return applyChangeBlockType(result, op);
     case 'change_block_alignment':
       return applyChangeBlockAlignment(result, op);
+    case 'insert_block':
+      return applyInsertBlock(result, op);
   }
 }
 
@@ -499,6 +515,17 @@ function applyChangeBlockAlignment(doc: Document, op: ChangeBlockAlignmentOp): D
   const block = doc.blocks[op.blockIndex];
   if (!block) return doc;
   block.alignment = op.newAlignment;
+  return doc;
+}
+
+function applyInsertBlock(doc: Document, op: InsertBlockOp): Document {
+  const newBlock: Block = {
+    id: generateBlockId(),
+    type: op.blockType,
+    alignment: 'left',
+    runs: [{ text: '', style: {} }],
+  };
+  doc.blocks.splice(op.afterBlockIndex + 1, 0, newBlock);
   return doc;
 }
 

@@ -282,6 +282,144 @@ describe('renderDocument', () => {
     });
   });
 
+  describe('blockquote rendering', () => {
+    it('renders a blockquote as <blockquote>', () => {
+      const doc = makeDoc([makeBlock('A quote', 'blockquote')]);
+      renderDocument(doc, container);
+      const bq = container.querySelector('blockquote');
+      expect(bq).not.toBeNull();
+      expect(bq!.textContent).toBe('A quote');
+    });
+
+    it('renders empty blockquote with <br>', () => {
+      const doc = makeDoc([makeBlock('', 'blockquote')]);
+      renderDocument(doc, container);
+      const bq = container.querySelector('blockquote');
+      expect(bq).not.toBeNull();
+      expect(bq!.querySelector('br')).not.toBeNull();
+    });
+
+    it('sets data-block-id on blockquote', () => {
+      const doc = makeDoc([{
+        id: 'bq-1',
+        type: 'blockquote' as const,
+        alignment: 'left' as const,
+        runs: [{ text: 'quote', style: {} }],
+      }]);
+      renderDocument(doc, container);
+      const bq = container.querySelector('blockquote');
+      expect(bq!.dataset.blockId).toBe('bq-1');
+    });
+  });
+
+  describe('horizontal rule rendering', () => {
+    it('renders a horizontal-rule as <hr>', () => {
+      const doc = makeDoc([makeBlock('', 'horizontal-rule')]);
+      renderDocument(doc, container);
+      const hr = container.querySelector('hr');
+      expect(hr).not.toBeNull();
+    });
+
+    it('sets data-block-id on hr', () => {
+      const doc = makeDoc([{
+        id: 'hr-1',
+        type: 'horizontal-rule' as const,
+        alignment: 'left' as const,
+        runs: [{ text: '', style: {} }],
+      }]);
+      renderDocument(doc, container);
+      const hr = container.querySelector('hr');
+      expect(hr!.dataset.blockId).toBe('hr-1');
+    });
+
+    it('renders hr between paragraphs', () => {
+      const doc = makeDoc([
+        makeBlock('before'),
+        makeBlock('', 'horizontal-rule'),
+        makeBlock('after'),
+      ]);
+      renderDocument(doc, container);
+      const children = Array.from(container.children);
+      expect(children[0].tagName).toBe('P');
+      expect(children[1].tagName).toBe('HR');
+      expect(children[2].tagName).toBe('P');
+    });
+  });
+
+  describe('code block rendering', () => {
+    it('renders a code-block as <pre> with <code>', () => {
+      const doc = makeDoc([makeBlock('var x = 1;', 'code-block')]);
+      renderDocument(doc, container);
+      const pre = container.querySelector('pre');
+      expect(pre).not.toBeNull();
+      const code = pre!.querySelector('code');
+      expect(code).not.toBeNull();
+      expect(code!.textContent).toBe('var x = 1;');
+    });
+
+    it('renders empty code-block with <br>', () => {
+      const doc = makeDoc([makeBlock('', 'code-block')]);
+      renderDocument(doc, container);
+      const pre = container.querySelector('pre');
+      expect(pre).not.toBeNull();
+      const code = pre!.querySelector('code');
+      expect(code).not.toBeNull();
+      expect(code!.querySelector('br')).not.toBeNull();
+    });
+
+    it('sets data-block-id on code-block', () => {
+      const doc = makeDoc([{
+        id: 'cb-1',
+        type: 'code-block' as const,
+        alignment: 'left' as const,
+        runs: [{ text: 'code', style: {} }],
+      }]);
+      renderDocument(doc, container);
+      const pre = container.querySelector('pre');
+      expect(pre!.dataset.blockId).toBe('cb-1');
+    });
+  });
+
+  describe('inline code rendering', () => {
+    it('renders code-styled text as <code> element', () => {
+      const doc = makeDoc([
+        makeStyledBlock([
+          { text: 'use ', style: {} },
+          { text: 'console.log', style: { code: true } },
+          { text: ' here', style: {} },
+        ]),
+      ]);
+      renderDocument(doc, container);
+      const codeEl = container.querySelector('p code');
+      expect(codeEl).not.toBeNull();
+      expect(codeEl!.textContent).toBe('console.log');
+    });
+
+    it('non-code text renders as <span>', () => {
+      const doc = makeDoc([
+        makeStyledBlock([{ text: 'normal', style: {} }]),
+      ]);
+      renderDocument(doc, container);
+      const span = container.querySelector('span');
+      expect(span).not.toBeNull();
+      expect(span!.tagName).toBe('SPAN');
+      expect(container.querySelector('p > code')).toBeNull();
+    });
+
+    it('renders code with bold as <code> with bold style', () => {
+      const doc = makeDoc([
+        makeStyledBlock([
+          { text: 'bold code', style: { bold: true, code: true } },
+        ]),
+      ]);
+      renderDocument(doc, container);
+      const codeEl = container.querySelector('code');
+      expect(codeEl).not.toBeNull();
+      expect(codeEl!.textContent).toBe('bold code');
+      expect(codeEl!.style.fontWeight).toBe('bold');
+    });
+  });
+
   describe('empty document', () => {
     it('renders empty paragraph for empty block', () => {
       const doc = makeDoc([makeBlock('')]);

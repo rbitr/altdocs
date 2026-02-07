@@ -829,3 +829,140 @@ describe('Editor - clipboard undo/redo', () => {
     expect(getBlockText(editor, 0)).toBe('hello world');
   });
 });
+
+// ============================================================
+// Extended Formatting
+// ============================================================
+
+describe('Editor - inline code shortcut', () => {
+  it('toggles code formatting on selection with Ctrl+`', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.handleKeyDown(makeKeyEvent('`', { ctrlKey: true }));
+    expect(editor.doc.blocks[0].runs[0].style.code).toBe(true);
+  });
+
+  it('does nothing with collapsed cursor', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    editor.handleKeyDown(makeKeyEvent('`', { ctrlKey: true }));
+    expect(editor.doc.blocks[0].runs[0].style.code).toBeFalsy();
+  });
+});
+
+describe('Editor - blockquote and code-block types', () => {
+  it('changes block to blockquote', () => {
+    const editor = createEditor(makeDoc([makeBlock('quote text')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeBlockType('blockquote');
+    expect(editor.doc.blocks[0].type).toBe('blockquote');
+    expect(getBlockText(editor, 0)).toBe('quote text');
+  });
+
+  it('changes block to code-block', () => {
+    const editor = createEditor(makeDoc([makeBlock('code text')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeBlockType('code-block');
+    expect(editor.doc.blocks[0].type).toBe('code-block');
+    expect(getBlockText(editor, 0)).toBe('code text');
+  });
+
+  it('blockquote change can be undone', () => {
+    const editor = createEditor(makeDoc([makeBlock('text')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeBlockType('blockquote');
+    editor.undo();
+    expect(editor.doc.blocks[0].type).toBe('paragraph');
+  });
+});
+
+describe('Editor - horizontal rule', () => {
+  it('inserts a horizontal rule after current block', () => {
+    const editor = createEditor(makeDoc([makeBlock('text')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 4 });
+    editor.insertHorizontalRule();
+    expect(editor.doc.blocks).toHaveLength(3);
+    expect(editor.doc.blocks[0].type).toBe('paragraph');
+    expect(editor.doc.blocks[1].type).toBe('horizontal-rule');
+    expect(editor.doc.blocks[2].type).toBe('paragraph');
+    // Cursor should be in the new paragraph after the HR
+    expect(editor.cursor.focus.blockIndex).toBe(2);
+    expect(editor.cursor.focus.offset).toBe(0);
+  });
+
+  it('insertHorizontalRule can be undone', () => {
+    const editor = createEditor(makeDoc([makeBlock('text')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 4 });
+    editor.insertHorizontalRule();
+    expect(editor.doc.blocks).toHaveLength(3);
+    editor.undo();
+    expect(editor.doc.blocks).toHaveLength(1);
+    expect(getBlockText(editor, 0)).toBe('text');
+  });
+
+  it('Enter on horizontal rule creates paragraph after', () => {
+    const editor = createEditor(makeDoc([
+      makeBlock('before'),
+      {
+        id: 'hr1', type: 'horizontal-rule', alignment: 'left',
+        runs: [{ text: '', style: {} }],
+      },
+    ]));
+    editor.cursor = collapsedCursor({ blockIndex: 1, offset: 0 });
+    editor.handleKeyDown(makeKeyEvent('Enter'));
+    expect(editor.doc.blocks).toHaveLength(3);
+    expect(editor.doc.blocks[2].type).toBe('paragraph');
+    expect(editor.cursor.focus.blockIndex).toBe(2);
+  });
+
+  it('Backspace on horizontal rule deletes it', () => {
+    const editor = createEditor(makeDoc([
+      makeBlock('before'),
+      {
+        id: 'hr1', type: 'horizontal-rule', alignment: 'left',
+        runs: [{ text: '', style: {} }],
+      },
+      makeBlock('after'),
+    ]));
+    editor.cursor = collapsedCursor({ blockIndex: 1, offset: 0 });
+    editor.handleKeyDown(makeKeyEvent('Backspace'));
+    expect(editor.doc.blocks).toHaveLength(2);
+    expect(editor.doc.blocks[0].type).toBe('paragraph');
+    expect(editor.doc.blocks[1].type).toBe('paragraph');
+    expect(editor.cursor.focus.blockIndex).toBe(0);
+  });
+
+  it('Backspace at start of block after HR deletes the HR', () => {
+    const editor = createEditor(makeDoc([
+      makeBlock('before'),
+      {
+        id: 'hr1', type: 'horizontal-rule', alignment: 'left',
+        runs: [{ text: '', style: {} }],
+      },
+      makeBlock('after'),
+    ]));
+    editor.cursor = collapsedCursor({ blockIndex: 2, offset: 0 });
+    editor.handleKeyDown(makeKeyEvent('Backspace'));
+    expect(editor.doc.blocks).toHaveLength(2);
+    expect(editor.doc.blocks[0].type).toBe('paragraph');
+    expect(editor.doc.blocks[1].type).toBe('paragraph');
+    expect(getBlockText(editor, 1)).toBe('after');
+    expect(editor.cursor.focus.blockIndex).toBe(1);
+  });
+
+  it('blocks text input on horizontal rule', () => {
+    const editor = createEditor(makeDoc([
+      {
+        id: 'hr1', type: 'horizontal-rule', alignment: 'left',
+        runs: [{ text: '', style: {} }],
+      },
+    ]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.handleKeyDown(makeKeyEvent('a'));
+    // Text should not have been inserted
+    expect(getBlockText(editor, 0)).toBe('');
+  });
+});

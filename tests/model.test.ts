@@ -999,3 +999,175 @@ describe('getTextInRange', () => {
     expect(text).toBe('o bold wor');
   });
 });
+
+// ============================================================
+// Extended Block Types and Inline Code
+// ============================================================
+
+describe('insert_block operation', () => {
+  it('inserts a new block after the specified block', () => {
+    const doc = makeDoc([makeBlock('first'), makeBlock('second')]);
+    const result = applyOperation(doc, {
+      type: 'insert_block',
+      afterBlockIndex: 0,
+      blockType: 'paragraph',
+    });
+    expect(result.blocks).toHaveLength(3);
+    expect(getBlockText(result, 0)).toBe('first');
+    expect(getBlockText(result, 1)).toBe('');
+    expect(result.blocks[1].type).toBe('paragraph');
+    expect(getBlockText(result, 2)).toBe('second');
+  });
+
+  it('inserts a horizontal-rule block', () => {
+    const doc = makeDoc([makeBlock('text')]);
+    const result = applyOperation(doc, {
+      type: 'insert_block',
+      afterBlockIndex: 0,
+      blockType: 'horizontal-rule',
+    });
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[1].type).toBe('horizontal-rule');
+  });
+
+  it('inserts at end of document', () => {
+    const doc = makeDoc([makeBlock('only')]);
+    const result = applyOperation(doc, {
+      type: 'insert_block',
+      afterBlockIndex: 0,
+      blockType: 'blockquote',
+    });
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[1].type).toBe('blockquote');
+  });
+
+  it('inserts a code-block', () => {
+    const doc = makeDoc([makeBlock('text')]);
+    const result = applyOperation(doc, {
+      type: 'insert_block',
+      afterBlockIndex: 0,
+      blockType: 'code-block',
+    });
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[1].type).toBe('code-block');
+  });
+
+  it('does not mutate original document', () => {
+    const doc = makeDoc([makeBlock('text')]);
+    applyOperation(doc, {
+      type: 'insert_block',
+      afterBlockIndex: 0,
+      blockType: 'horizontal-rule',
+    });
+    expect(doc.blocks).toHaveLength(1);
+  });
+});
+
+describe('change_block_type with new types', () => {
+  it('changes paragraph to blockquote', () => {
+    const doc = makeDoc([makeBlock('quote text')]);
+    const result = applyOperation(doc, {
+      type: 'change_block_type',
+      blockIndex: 0,
+      newType: 'blockquote',
+    });
+    expect(result.blocks[0].type).toBe('blockquote');
+    expect(getBlockText(result, 0)).toBe('quote text');
+  });
+
+  it('changes paragraph to code-block', () => {
+    const doc = makeDoc([makeBlock('var x = 1;')]);
+    const result = applyOperation(doc, {
+      type: 'change_block_type',
+      blockIndex: 0,
+      newType: 'code-block',
+    });
+    expect(result.blocks[0].type).toBe('code-block');
+    expect(getBlockText(result, 0)).toBe('var x = 1;');
+  });
+
+  it('changes paragraph to horizontal-rule', () => {
+    const doc = makeDoc([makeBlock('text')]);
+    const result = applyOperation(doc, {
+      type: 'change_block_type',
+      blockIndex: 0,
+      newType: 'horizontal-rule',
+    });
+    expect(result.blocks[0].type).toBe('horizontal-rule');
+  });
+
+  it('changes blockquote back to paragraph', () => {
+    const doc = makeDoc([makeBlock('quote', 'blockquote')]);
+    const result = applyOperation(doc, {
+      type: 'change_block_type',
+      blockIndex: 0,
+      newType: 'paragraph',
+    });
+    expect(result.blocks[0].type).toBe('paragraph');
+    expect(getBlockText(result, 0)).toBe('quote');
+  });
+});
+
+describe('inline code formatting', () => {
+  it('applies code style to a range', () => {
+    const doc = makeDoc([makeBlock('hello world')]);
+    const result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 6 },
+        end: { blockIndex: 0, offset: 11 },
+      },
+      style: { code: true },
+    });
+    expect(result.blocks[0].runs).toHaveLength(2);
+    expect(result.blocks[0].runs[0].text).toBe('hello ');
+    expect(result.blocks[0].runs[0].style.code).toBeFalsy();
+    expect(result.blocks[0].runs[1].text).toBe('world');
+    expect(result.blocks[0].runs[1].style.code).toBe(true);
+  });
+
+  it('removes code style from a range', () => {
+    const doc = makeDoc([
+      makeStyledBlock([{ text: 'all code', style: { code: true } }]),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'remove_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 8 },
+      },
+      style: { code: true },
+    });
+    expect(result.blocks[0].runs[0].style.code).toBe(false);
+  });
+
+  it('code style is independent of other formatting', () => {
+    const doc = makeDoc([makeBlock('text')]);
+    let result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 4 },
+      },
+      style: { bold: true },
+    });
+    result = applyOperation(result, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 4 },
+      },
+      style: { code: true },
+    });
+    expect(result.blocks[0].runs[0].style.bold).toBe(true);
+    expect(result.blocks[0].runs[0].style.code).toBe(true);
+  });
+
+  it('stylesEqual correctly handles code property', () => {
+    expect(stylesEqual({ code: true }, { code: true })).toBe(true);
+    expect(stylesEqual({ code: true }, {})).toBe(false);
+    expect(stylesEqual({}, {})).toBe(true);
+    expect(stylesEqual({ bold: true, code: true }, { bold: true, code: true })).toBe(true);
+    expect(stylesEqual({ bold: true, code: true }, { bold: true })).toBe(false);
+  });
+});

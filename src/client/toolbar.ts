@@ -41,6 +41,10 @@ export class Toolbar {
       this.editor.toggleFormatting({ strikethrough: true });
       this.editor.focus();
     });
+    this.addButton(formatGroup, 'code', '<>', 'Inline Code (Ctrl+`)', () => {
+      this.editor.toggleFormatting({ code: true });
+      this.editor.focus();
+    });
 
     this.addSeparator();
 
@@ -62,6 +66,15 @@ export class Toolbar {
     });
     this.addButton(alignGroup, 'align-right', '\u2262', 'Align Right', () => {
       this.editor.changeAlignment('right');
+      this.editor.focus();
+    });
+
+    this.addSeparator();
+
+    // Insert group
+    const insertGroup = this.createGroup();
+    this.addButton(insertGroup, 'horizontal-rule', '—', 'Horizontal Rule', () => {
+      this.editor.insertHorizontalRule();
       this.editor.focus();
     });
   }
@@ -122,6 +135,8 @@ export class Toolbar {
       { value: 'heading3', label: 'Heading 3' },
       { value: 'bullet-list-item', label: 'Bullet List' },
       { value: 'numbered-list-item', label: 'Numbered List' },
+      { value: 'blockquote', label: 'Block Quote' },
+      { value: 'code-block', label: 'Code Block' },
     ];
 
     for (const opt of options) {
@@ -153,6 +168,7 @@ export class Toolbar {
     this.setActive('italic', !!formatting.italic);
     this.setActive('underline', !!formatting.underline);
     this.setActive('strikethrough', !!formatting.strikethrough);
+    this.setActive('code', !!formatting.code);
 
     // Update alignment buttons
     this.setActive('align-left', alignment === 'left');

@@ -99,6 +99,7 @@ describe('Toolbar - rendering', () => {
     expect(options.map(o => o.value)).toEqual([
       'paragraph', 'heading1', 'heading2', 'heading3',
       'bullet-list-item', 'numbered-list-item',
+      'blockquote', 'code-block',
     ]);
   });
 

@@ -1,5 +1,5 @@
 import type { Document, Operation, Position, TextStyle, BlockType, Alignment } from '../shared/model.js';
-import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange } from '../shared/model.js';
+import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange, generateBlockId } from '../shared/model.js';
 import type { CursorState } from '../shared/cursor.js';
 import {
   collapsedCursor,
@@ -147,6 +147,10 @@ export class Editor {
           e.preventDefault();
           this.toggleFormatting({ strikethrough: true });
           return;
+        case '`':
+          e.preventDefault();
+          this.toggleFormatting({ code: true });
+          return;
         case 'a':
           e.preventDefault();
           this.cursor = selectAll(this.doc);
@@ -226,6 +230,9 @@ export class Editor {
     // This handles cases where beforeinput doesn't fire (e.g., headless browsers).
     if (!ctrl && !e.altKey && e.key.length === 1) {
       e.preventDefault();
+      // Block text input on horizontal rules
+      const block = this.doc.blocks[this.cursor.focus.blockIndex];
+      if (block && block.type === 'horizontal-rule') return;
       this.insertText(e.key);
       return;
     }
@@ -396,6 +403,30 @@ export class Editor {
     }
 
     const pos = this.cursor.focus;
+    const currentBlock = this.doc.blocks[pos.blockIndex];
+
+    // If current block is a horizontal rule, delete it and move cursor to previous block end
+    if (currentBlock && currentBlock.type === 'horizontal-rule') {
+      if (pos.blockIndex > 0) {
+        const prevBlockLen = blockTextLength(this.doc.blocks[pos.blockIndex - 1]);
+        this.doc.blocks.splice(pos.blockIndex, 1);
+        this.cursor = collapsedCursor({
+          blockIndex: pos.blockIndex - 1,
+          offset: prevBlockLen,
+        });
+      } else if (this.doc.blocks.length > 1) {
+        // HR is first block — remove it and move to next block start
+        this.doc.blocks.splice(0, 1);
+        this.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+      } else {
+        // Only block — convert to empty paragraph
+        currentBlock.type = 'paragraph';
+        currentBlock.runs = [{ text: '', style: {} }];
+        this.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+      }
+      this.render();
+      return;
+    }
 
     if (pos.offset > 0) {
       // Delete character before cursor
@@ -412,17 +443,28 @@ export class Editor {
         offset: pos.offset - 1,
       });
     } else if (pos.blockIndex > 0) {
-      // At start of block — merge with previous
-      const prevBlockLen = blockTextLength(this.doc.blocks[pos.blockIndex - 1]);
-      const op: Operation = {
-        type: 'merge_block',
-        blockIndex: pos.blockIndex,
-      };
-      this.doc = applyOperation(this.doc, op);
-      this.cursor = collapsedCursor({
-        blockIndex: pos.blockIndex - 1,
-        offset: prevBlockLen,
-      });
+      const prevBlock = this.doc.blocks[pos.blockIndex - 1];
+
+      // If previous block is a horizontal rule, delete the HR
+      if (prevBlock.type === 'horizontal-rule') {
+        this.doc.blocks.splice(pos.blockIndex - 1, 1);
+        this.cursor = collapsedCursor({
+          blockIndex: pos.blockIndex - 1,
+          offset: 0,
+        });
+      } else {
+        // Normal merge with previous
+        const prevBlockLen = blockTextLength(prevBlock);
+        const op: Operation = {
+          type: 'merge_block',
+          blockIndex: pos.blockIndex,
+        };
+        this.doc = applyOperation(this.doc, op);
+        this.cursor = collapsedCursor({
+          blockIndex: pos.blockIndex - 1,
+          offset: prevBlockLen,
+        });
+      }
     }
 
     this.render();
@@ -470,6 +512,24 @@ export class Editor {
     // If there's a selection, delete it first
     if (!isCollapsed(this.cursor)) {
       this.deleteSelection();
+    }
+
+    const currentBlock = this.doc.blocks[this.cursor.focus.blockIndex];
+
+    // Horizontal rules: Enter inserts a new paragraph after the rule
+    if (currentBlock && currentBlock.type === 'horizontal-rule') {
+      const op: Operation = {
+        type: 'insert_block',
+        afterBlockIndex: this.cursor.focus.blockIndex,
+        blockType: 'paragraph',
+      };
+      this.doc = applyOperation(this.doc, op);
+      this.cursor = collapsedCursor({
+        blockIndex: this.cursor.focus.blockIndex + 1,
+        offset: 0,
+      });
+      this.render();
+      return;
     }
 
     const op: Operation = {
@@ -562,6 +622,42 @@ export class Editor {
       newType,
     };
     this.doc = applyOperation(this.doc, op);
+    this.render();
+  }
+
+  /** Insert a horizontal rule after the current block */
+  insertHorizontalRule(): void {
+    this.pushHistory();
+
+    // If there's a selection, delete it first
+    if (!isCollapsed(this.cursor)) {
+      this.deleteSelection();
+    }
+
+    const blockIndex = this.cursor.focus.blockIndex;
+
+    // Insert the HR block after the current block
+    const insertOp: Operation = {
+      type: 'insert_block',
+      afterBlockIndex: blockIndex,
+      blockType: 'horizontal-rule',
+    };
+    this.doc = applyOperation(this.doc, insertOp);
+
+    // Insert a new paragraph after the HR for continued editing
+    const paraOp: Operation = {
+      type: 'insert_block',
+      afterBlockIndex: blockIndex + 1,
+      blockType: 'paragraph',
+    };
+    this.doc = applyOperation(this.doc, paraOp);
+
+    // Move cursor to the new paragraph
+    this.cursor = collapsedCursor({
+      blockIndex: blockIndex + 2,
+      offset: 0,
+    });
+
     this.render();
   }
 
