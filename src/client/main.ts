@@ -1,4 +1,5 @@
 import { Editor } from './editor.js';
+import { Toolbar } from './toolbar.js';
 import type { Document } from '../shared/model.js';
 
 const sampleDoc: Document = {
@@ -32,12 +33,17 @@ const sampleDoc: Document = {
 
 const app = document.getElementById('app');
 if (app) {
+  const toolbarEl = document.createElement('div');
+  app.appendChild(toolbarEl);
+
   const editorEl = document.createElement('div');
   editorEl.className = 'altdocs-editor';
   app.appendChild(editorEl);
 
   const editor = new Editor(editorEl, sampleDoc);
+  const toolbar = new Toolbar(toolbarEl, editor);
 
   // Expose editor for debugging in browser console
   (window as any).__editor = editor;
+  (window as any).__toolbar = toolbar;
 }

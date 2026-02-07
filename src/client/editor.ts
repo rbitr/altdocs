@@ -1,5 +1,5 @@
-import type { Document, Operation, Position, TextStyle } from '../shared/model.js';
-import { applyOperation, blockTextLength, createEmptyDocument } from '../shared/model.js';
+import type { Document, Operation, Position, TextStyle, BlockType, Alignment } from '../shared/model.js';
+import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument } from '../shared/model.js';
 import type { CursorState } from '../shared/cursor.js';
 import {
   collapsedCursor,
@@ -25,6 +25,7 @@ export class Editor {
   public history: HistoryManager;
   private container: HTMLElement;
   private rendering = false;
+  private onUpdateCallbacks: Array<() => void> = [];
 
   constructor(container: HTMLElement, doc?: Document) {
     this.container = container;
@@ -47,6 +48,29 @@ export class Editor {
     renderDocument(this.doc, this.container);
     applyCursorToDOM(this.container, this.doc, this.cursor);
     this.rendering = false;
+    this.notifyUpdate();
+  }
+
+  private notifyUpdate(): void {
+    for (const cb of this.onUpdateCallbacks) {
+      cb();
+    }
+  }
+
+  /** Register a callback to be called when the editor state changes */
+  onUpdate(callback: () => void): void {
+    this.onUpdateCallbacks.push(callback);
+  }
+
+  /** Update cursor in DOM and notify listeners */
+  private updateCursor(): void {
+    applyCursorToDOM(this.container, this.doc, this.cursor);
+    this.notifyUpdate();
+  }
+
+  /** Focus the editor container */
+  focus(): void {
+    this.container.focus();
   }
 
   private bindEvents(): void {
@@ -69,12 +93,14 @@ export class Editor {
     const newCursor = readCursorFromDOM(this.container, this.doc);
     if (newCursor) {
       this.cursor = newCursor;
+      this.notifyUpdate();
     }
     // Also schedule a delayed read in case the browser hasn't finished positioning
     setTimeout(() => {
       const delayedCursor = readCursorFromDOM(this.container, this.doc);
       if (delayedCursor) {
         this.cursor = delayedCursor;
+        this.notifyUpdate();
       }
     }, 0);
   }
@@ -114,10 +140,14 @@ export class Editor {
           e.preventDefault();
           this.toggleFormatting({ underline: true });
           return;
+        case 'd':
+          e.preventDefault();
+          this.toggleFormatting({ strikethrough: true });
+          return;
         case 'a':
           e.preventDefault();
           this.cursor = selectAll(this.doc);
-          applyCursorToDOM(this.container, this.doc, this.cursor);
+          this.updateCursor();
           return;
       }
     }
@@ -126,13 +156,13 @@ export class Editor {
     if (ctrl && e.key === 'Home') {
       e.preventDefault();
       this.cursor = moveToDocStart(shift, this.cursor);
-      applyCursorToDOM(this.container, this.doc, this.cursor);
+      this.updateCursor();
       return;
     }
     if (ctrl && e.key === 'End') {
       e.preventDefault();
       this.cursor = moveToDocEnd(this.doc, shift, this.cursor);
-      applyCursorToDOM(this.container, this.doc, this.cursor);
+      this.updateCursor();
       return;
     }
 
@@ -140,37 +170,37 @@ export class Editor {
       case 'ArrowLeft':
         e.preventDefault();
         this.cursor = moveLeft(this.cursor, this.doc, shift);
-        applyCursorToDOM(this.container, this.doc, this.cursor);
+        this.updateCursor();
         return;
 
       case 'ArrowRight':
         e.preventDefault();
         this.cursor = moveRight(this.cursor, this.doc, shift);
-        applyCursorToDOM(this.container, this.doc, this.cursor);
+        this.updateCursor();
         return;
 
       case 'ArrowUp':
         e.preventDefault();
         this.cursor = moveUp(this.cursor, this.doc, shift);
-        applyCursorToDOM(this.container, this.doc, this.cursor);
+        this.updateCursor();
         return;
 
       case 'ArrowDown':
         e.preventDefault();
         this.cursor = moveDown(this.cursor, this.doc, shift);
-        applyCursorToDOM(this.container, this.doc, this.cursor);
+        this.updateCursor();
         return;
 
       case 'Home':
         e.preventDefault();
         this.cursor = moveToLineStart(this.cursor, shift);
-        applyCursorToDOM(this.container, this.doc, this.cursor);
+        this.updateCursor();
         return;
 
       case 'End':
         e.preventDefault();
         this.cursor = moveToLineEnd(this.cursor, this.doc, shift);
-        applyCursorToDOM(this.container, this.doc, this.cursor);
+        this.updateCursor();
         return;
 
       case 'Backspace':
@@ -416,6 +446,78 @@ export class Editor {
     }
 
     return false;
+  }
+
+  /** Change the block type of the block at the cursor */
+  changeBlockType(newType: BlockType): void {
+    this.pushHistory();
+    const blockIndex = this.cursor.focus.blockIndex;
+    const op: Operation = {
+      type: 'change_block_type',
+      blockIndex,
+      newType,
+    };
+    this.doc = applyOperation(this.doc, op);
+    this.render();
+  }
+
+  /** Change the alignment of the block at the cursor */
+  changeAlignment(newAlignment: Alignment): void {
+    this.pushHistory();
+    const blockIndex = this.cursor.focus.blockIndex;
+    const op: Operation = {
+      type: 'change_block_alignment',
+      blockIndex,
+      newAlignment,
+    };
+    this.doc = applyOperation(this.doc, op);
+    this.render();
+  }
+
+  /** Get the current formatting state at cursor/selection for toolbar display */
+  getActiveFormatting(): TextStyle {
+    const block = this.doc.blocks[this.cursor.focus.blockIndex];
+    if (!block) return {};
+
+    // Find style at the focus offset
+    let offset = 0;
+    for (const run of block.runs) {
+      const runEnd = offset + run.text.length;
+      // For collapsed cursor at offset 0, use first run
+      // For collapsed cursor at end, use last run
+      // For cursor in middle, use run containing the offset
+      if (this.cursor.focus.offset <= runEnd && this.cursor.focus.offset >= offset) {
+        // At a boundary, prefer the run before the cursor (left-biased)
+        if (this.cursor.focus.offset === offset && offset > 0) {
+          // Use previous run's style (left-biased)
+          continue;
+        }
+        return { ...run.style };
+      }
+      offset = runEnd;
+    }
+    // Fallback: use last run's style
+    if (block.runs.length > 0) {
+      return { ...block.runs[block.runs.length - 1].style };
+    }
+    return {};
+  }
+
+  /** Get the block type of the current block */
+  getActiveBlockType(): BlockType {
+    const block = this.doc.blocks[this.cursor.focus.blockIndex];
+    return block ? block.type : 'paragraph';
+  }
+
+  /** Get the alignment of the current block */
+  getActiveAlignment(): Alignment {
+    const block = this.doc.blocks[this.cursor.focus.blockIndex];
+    return block ? block.alignment : 'left';
+  }
+
+  /** Get the editor container element */
+  getContainer(): HTMLElement {
+    return this.container;
   }
 
   /** Get the current document (for external use) */

@@ -16,13 +16,98 @@ body {
   padding: 2rem;
 }
 
+/* Toolbar styles */
+.altdocs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: #ccc;
+  margin: 0 4px;
+}
+
+.toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #444;
+  font-family: inherit;
+}
+
+.toolbar-btn:hover {
+  background: #e0e0e0;
+  border-color: #ccc;
+}
+
+.toolbar-btn.active {
+  background: #d0d0d0;
+  border-color: #bbb;
+  color: #111;
+}
+
+.toolbar-btn-bold {
+  font-weight: bold;
+}
+
+.toolbar-btn-italic {
+  font-style: italic;
+}
+
+.toolbar-btn-underline {
+  text-decoration: underline;
+}
+
+.toolbar-btn-strikethrough {
+  text-decoration: line-through;
+}
+
+.toolbar-select {
+  height: 28px;
+  padding: 0 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: #444;
+  font-family: inherit;
+}
+
+.toolbar-select:hover {
+  border-color: #999;
+}
+
 /* Document editor styles */
 .altdocs-editor {
   min-height: 400px;
   padding: 1rem;
   background: #fff;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 0 0 4px 4px;
   line-height: 1.6;
 }
 

@@ -505,3 +505,171 @@ describe('Editor - undo/redo', () => {
     expect(editor.cursor.focus.offset).toBe(5);
   });
 });
+
+describe('Editor - changeBlockType', () => {
+  it('changes block type to heading1', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeBlockType('heading1');
+    expect(editor.doc.blocks[0].type).toBe('heading1');
+  });
+
+  it('changes block type to bullet-list-item', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeBlockType('bullet-list-item');
+    expect(editor.doc.blocks[0].type).toBe('bullet-list-item');
+  });
+
+  it('changes block at cursor focus position', () => {
+    const editor = createEditor(makeDoc([makeBlock('first'), makeBlock('second')]));
+    editor.cursor = collapsedCursor({ blockIndex: 1, offset: 0 });
+    editor.changeBlockType('heading2');
+    expect(editor.doc.blocks[0].type).toBe('paragraph');
+    expect(editor.doc.blocks[1].type).toBe('heading2');
+  });
+
+  it('can be undone', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeBlockType('heading1');
+    expect(editor.doc.blocks[0].type).toBe('heading1');
+    editor.undo();
+    expect(editor.doc.blocks[0].type).toBe('paragraph');
+  });
+});
+
+describe('Editor - changeAlignment', () => {
+  it('changes alignment to center', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeAlignment('center');
+    expect(editor.doc.blocks[0].alignment).toBe('center');
+  });
+
+  it('changes alignment to right', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeAlignment('right');
+    expect(editor.doc.blocks[0].alignment).toBe('right');
+  });
+
+  it('can be undone', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeAlignment('center');
+    editor.undo();
+    expect(editor.doc.blocks[0].alignment).toBe('left');
+  });
+});
+
+describe('Editor - getActiveFormatting', () => {
+  it('returns empty style for plain text', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    const fmt = editor.getActiveFormatting();
+    expect(fmt.bold).toBeFalsy();
+    expect(fmt.italic).toBeFalsy();
+  });
+
+  it('returns bold when cursor is in bold text', () => {
+    const editor = createEditor(makeDoc([{
+      id: 'b1',
+      type: 'paragraph',
+      alignment: 'left',
+      runs: [
+        { text: 'plain ', style: {} },
+        { text: 'bold', style: { bold: true } },
+        { text: ' plain', style: {} },
+      ],
+    }]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 7 }); // inside "bold"
+    const fmt = editor.getActiveFormatting();
+    expect(fmt.bold).toBe(true);
+  });
+
+  it('returns combined styles', () => {
+    const editor = createEditor(makeDoc([{
+      id: 'b1',
+      type: 'paragraph',
+      alignment: 'left',
+      runs: [{ text: 'hello', style: { bold: true, italic: true, underline: true } }],
+    }]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    const fmt = editor.getActiveFormatting();
+    expect(fmt.bold).toBe(true);
+    expect(fmt.italic).toBe(true);
+    expect(fmt.underline).toBe(true);
+  });
+});
+
+describe('Editor - getActiveBlockType', () => {
+  it('returns paragraph for default block', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    expect(editor.getActiveBlockType()).toBe('paragraph');
+  });
+
+  it('returns heading1 for heading block', () => {
+    const editor = createEditor(makeDoc([{
+      id: 'b1', type: 'heading1', alignment: 'left',
+      runs: [{ text: 'hello', style: {} }],
+    }]));
+    expect(editor.getActiveBlockType()).toBe('heading1');
+  });
+
+  it('returns type of block at cursor', () => {
+    const editor = createEditor(makeDoc([
+      makeBlock('first'),
+      { id: 'b2', type: 'heading2', alignment: 'left', runs: [{ text: 'second', style: {} }] },
+    ]));
+    editor.cursor = collapsedCursor({ blockIndex: 1, offset: 0 });
+    expect(editor.getActiveBlockType()).toBe('heading2');
+  });
+});
+
+describe('Editor - getActiveAlignment', () => {
+  it('returns left for default block', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    expect(editor.getActiveAlignment()).toBe('left');
+  });
+
+  it('returns center for center-aligned block', () => {
+    const editor = createEditor(makeDoc([{
+      id: 'b1', type: 'paragraph', alignment: 'center',
+      runs: [{ text: 'hello', style: {} }],
+    }]));
+    expect(editor.getActiveAlignment()).toBe('center');
+  });
+});
+
+describe('Editor - strikethrough shortcut', () => {
+  it('toggles strikethrough on selection with Ctrl+D', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.handleKeyDown(makeKeyEvent('d', { ctrlKey: true }));
+    expect(editor.doc.blocks[0].runs[0].style.strikethrough).toBe(true);
+  });
+});
+
+describe('Editor - onUpdate callback', () => {
+  it('calls onUpdate after insertText', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    let called = false;
+    editor.onUpdate(() => { called = true; });
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.insertText('!');
+    expect(called).toBe(true);
+  });
+
+  it('calls onUpdate after changeBlockType', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    let callCount = 0;
+    editor.onUpdate(() => { callCount++; });
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.changeBlockType('heading1');
+    expect(callCount).toBeGreaterThan(0);
+  });
+});
