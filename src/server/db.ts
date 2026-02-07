@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -20,10 +21,7 @@ export interface DocumentListItem {
 }
 
 const DATA_DIR = path.resolve(__dirname, '../../data');
-const DATA_FILE = path.join(DATA_DIR, 'documents.json');
-
-// In-memory store, synced to disk
-let store: Map<string, DocumentRecord> = new Map();
+const DB_PATH = path.join(DATA_DIR, 'altdocs.db');
 
 function ensureDataDir(): void {
   if (!fs.existsSync(DATA_DIR)) {
@@ -31,40 +29,40 @@ function ensureDataDir(): void {
   }
 }
 
-function loadFromDisk(): void {
+let db: Database.Database;
+
+function initDb(): Database.Database {
   ensureDataDir();
-  if (fs.existsSync(DATA_FILE)) {
-    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    const records: DocumentRecord[] = JSON.parse(raw);
-    store = new Map(records.map((r) => [r.id, r]));
-  }
+  const database = new Database(DB_PATH);
+  database.pragma('journal_mode = WAL');
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  return database;
 }
 
-function saveToDisk(): void {
-  ensureDataDir();
-  const records = Array.from(store.values());
-  fs.writeFileSync(DATA_FILE, JSON.stringify(records, null, 2), 'utf-8');
-}
-
-// Load on startup
-loadFromDisk();
+db = initDb();
 
 export function getDocument(id: string): DocumentRecord | undefined {
-  return store.get(id);
+  const row = db.prepare('SELECT id, title, content, created_at, updated_at FROM documents WHERE id = ?').get(id) as DocumentRecord | undefined;
+  return row;
 }
 
 export function listDocuments(): DocumentListItem[] {
-  return Array.from(store.values())
-    .map((r) => ({ id: r.id, title: r.title, updated_at: r.updated_at }))
-    .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const rows = db.prepare('SELECT id, title, updated_at FROM documents ORDER BY updated_at DESC').all() as DocumentListItem[];
+  return rows;
 }
 
 export function createDocument(id: string, title: string, content: string): DocumentRecord {
   const now = new Date().toISOString();
-  const record: DocumentRecord = { id, title, content, created_at: now, updated_at: now };
-  store.set(id, record);
-  saveToDisk();
-  return record;
+  db.prepare('INSERT INTO documents (id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, title, content, now, now);
+  return { id, title, content, created_at: now, updated_at: now };
 }
 
 export function updateDocument(
@@ -72,22 +70,38 @@ export function updateDocument(
   title: string,
   content: string
 ): DocumentRecord | undefined {
-  const existing = store.get(id);
+  const existing = db.prepare('SELECT created_at FROM documents WHERE id = ?').get(id) as { created_at: string } | undefined;
   if (!existing) return undefined;
-  existing.title = title;
-  existing.content = content;
-  existing.updated_at = new Date().toISOString();
-  saveToDisk();
-  return existing;
+  const now = new Date().toISOString();
+  db.prepare('UPDATE documents SET title = ?, content = ?, updated_at = ? WHERE id = ?').run(title, content, now, id);
+  return { id, title, content, created_at: existing.created_at, updated_at: now };
 }
 
 export function deleteDocument(id: string): boolean {
-  const existed = store.delete(id);
-  if (existed) saveToDisk();
-  return existed;
+  const result = db.prepare('DELETE FROM documents WHERE id = ?').run(id);
+  return result.changes > 0;
 }
 
-/** Reset store — for testing only */
+/** Reset store — for testing only. Deletes all rows. */
 export function resetStore(): void {
-  store = new Map();
+  db.prepare('DELETE FROM documents').run();
+}
+
+/** Switch to an in-memory database — for testing only. */
+export function useMemoryDb(): void {
+  db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+}
+
+/** Close the database connection. */
+export function closeDb(): void {
+  db.close();
 }

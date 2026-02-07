@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import express from 'express';
 import { apiRouter } from '../src/server/api.js';
-import { resetStore } from '../src/server/db.js';
+import { resetStore, useMemoryDb } from '../src/server/db.js';
 import type { Server } from 'http';
 
 let server: Server;
@@ -15,6 +15,7 @@ function createTestApp() {
 }
 
 beforeAll(async () => {
+  useMemoryDb();
   const app = createTestApp();
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => {

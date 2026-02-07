@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import {
   createDocument,
   getDocument,
@@ -6,9 +6,14 @@ import {
   updateDocument,
   deleteDocument,
   resetStore,
+  useMemoryDb,
 } from '../src/server/db.js';
 
 describe('Document Store', () => {
+  beforeAll(() => {
+    useMemoryDb();
+  });
+
   beforeEach(() => {
     resetStore();
   });
