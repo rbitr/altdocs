@@ -580,20 +580,19 @@ export class Editor {
 
   /** Get the current formatting state at cursor/selection for toolbar display */
   getActiveFormatting(): TextStyle {
-    const block = this.doc.blocks[this.cursor.focus.blockIndex];
+    // When there's a selection, use the anchor position (where selection started)
+    // to determine formatting — this better reflects the selected content's style
+    const pos = isCollapsed(this.cursor) ? this.cursor.focus : this.cursor.anchor;
+    const block = this.doc.blocks[pos.blockIndex];
     if (!block) return {};
 
-    // Find style at the focus offset
+    // Find style at the position
     let offset = 0;
     for (const run of block.runs) {
       const runEnd = offset + run.text.length;
-      // For collapsed cursor at offset 0, use first run
-      // For collapsed cursor at end, use last run
-      // For cursor in middle, use run containing the offset
-      if (this.cursor.focus.offset <= runEnd && this.cursor.focus.offset >= offset) {
+      if (pos.offset <= runEnd && pos.offset >= offset) {
         // At a boundary, prefer the run before the cursor (left-biased)
-        if (this.cursor.focus.offset === offset && offset > 0) {
-          // Use previous run's style (left-biased)
+        if (pos.offset === offset && offset > 0) {
           continue;
         }
         return { ...run.style };
