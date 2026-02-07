@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDocument, listDocuments, createDocument, updateDocument } from './db.js';
+import { getDocument, listDocuments, createDocument, updateDocument, deleteDocument } from './db.js';
 
 const router = Router();
 
@@ -54,6 +54,16 @@ router.put('/api/documents/:id', (req, res) => {
     content !== undefined ? content : existing.content
   );
   res.json(updated);
+});
+
+// Delete a document
+router.delete('/api/documents/:id', (req, res) => {
+  const deleted = deleteDocument(req.params.id);
+  if (!deleted) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+  res.status(204).end();
 });
 
 export { router as apiRouter };

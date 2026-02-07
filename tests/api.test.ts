@@ -148,6 +148,52 @@ describe('API Endpoints', () => {
     });
   });
 
+  describe('DELETE /api/documents/:id', () => {
+    it('deletes an existing document', async () => {
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'doc1', title: 'To Delete', content: '[]' }),
+      });
+
+      const res = await fetch(`${baseUrl}/api/documents/doc1`, {
+        method: 'DELETE',
+      });
+      expect(res.status).toBe(204);
+
+      // Verify it's gone
+      const getRes = await fetch(`${baseUrl}/api/documents/doc1`);
+      expect(getRes.status).toBe(404);
+    });
+
+    it('returns 404 for non-existent document', async () => {
+      const res = await fetch(`${baseUrl}/api/documents/nope`, {
+        method: 'DELETE',
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('does not affect other documents', async () => {
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'keep', title: 'Keep', content: '[]' }),
+      });
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'remove', title: 'Remove', content: '[]' }),
+      });
+
+      await fetch(`${baseUrl}/api/documents/remove`, { method: 'DELETE' });
+
+      const listRes = await fetch(`${baseUrl}/api/documents`);
+      const docs = await listRes.json();
+      expect(docs.length).toBe(1);
+      expect(docs[0].id).toBe('keep');
+    });
+  });
+
   describe('GET /api/documents', () => {
     it('returns empty list when no documents', async () => {
       const res = await fetch(`${baseUrl}/api/documents`);

@@ -2,7 +2,7 @@ import { Editor } from './editor.js';
 import { Toolbar } from './toolbar.js';
 import { createEmptyDocument } from '../shared/model.js';
 import type { Document } from '../shared/model.js';
-import { fetchDocumentList, fetchDocument, saveDocument } from './api-client.js';
+import { fetchDocumentList, fetchDocument, saveDocument, deleteDocumentById, duplicateDocument } from './api-client.js';
 
 let editor: Editor | null = null;
 let toolbar: Toolbar | null = null;
@@ -81,14 +81,65 @@ async function renderDocumentList(container: HTMLElement): Promise<void> {
       for (const doc of docs) {
         const li = document.createElement('li');
         li.className = 'doc-list-item';
+
+        const titleArea = document.createElement('div');
+        titleArea.className = 'doc-item-title-area';
+
         const link = document.createElement('a');
         link.href = `#/doc/${encodeURIComponent(doc.id)}`;
         link.textContent = doc.title || 'Untitled';
+        if (!doc.title || doc.title === 'Untitled') {
+          link.classList.add('doc-title-untitled');
+        }
+        titleArea.appendChild(link);
+
         const date = document.createElement('span');
         date.className = 'doc-list-date';
         date.textContent = new Date(doc.updated_at).toLocaleDateString();
-        li.appendChild(link);
-        li.appendChild(date);
+        titleArea.appendChild(date);
+
+        li.appendChild(titleArea);
+
+        // Action buttons
+        const actions = document.createElement('div');
+        actions.className = 'doc-item-actions';
+
+        const dupBtn = document.createElement('button');
+        dupBtn.className = 'doc-action-btn';
+        dupBtn.textContent = 'Duplicate';
+        dupBtn.title = 'Duplicate document';
+        dupBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const newId = generateId();
+          const newTitle = (doc.title || 'Untitled') + ' (Copy)';
+          try {
+            await duplicateDocument(doc.id, newId, newTitle);
+            await renderDocumentList(container);
+          } catch {
+            // Silently fail — server may be down
+          }
+        });
+        actions.appendChild(dupBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'doc-action-btn doc-action-btn-danger';
+        delBtn.textContent = 'Delete';
+        delBtn.title = 'Delete document';
+        delBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!confirm(`Delete "${doc.title || 'Untitled'}"? This cannot be undone.`)) return;
+          try {
+            await deleteDocumentById(doc.id);
+            await renderDocumentList(container);
+          } catch {
+            // Silently fail
+          }
+        });
+        actions.appendChild(delBtn);
+
+        li.appendChild(actions);
         list.appendChild(li);
       }
       container.appendChild(list);
@@ -118,6 +169,14 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   statusBar.appendChild(saveStatus);
   container.appendChild(statusBar);
 
+  // Title input
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.className = 'doc-title-input';
+  titleInput.placeholder = 'Untitled';
+  titleInput.id = 'doc-title';
+  container.appendChild(titleInput);
+
   // Toolbar
   const toolbarEl = document.createElement('div');
   container.appendChild(toolbarEl);
@@ -141,6 +200,27 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
     // Document doesn't exist yet — create a new one
     doc = createEmptyDocument(docId, 'Untitled');
   }
+
+  // Set title
+  titleInput.value = doc.title === 'Untitled' ? '' : doc.title;
+
+  // Title change handler — save title on change
+  let titleSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  titleInput.addEventListener('input', () => {
+    if (!editor) return;
+    const newTitle = titleInput.value.trim() || 'Untitled';
+    editor.doc = { ...editor.doc, title: newTitle };
+    // Debounce title save
+    if (titleSaveTimer) clearTimeout(titleSaveTimer);
+    titleSaveTimer = setTimeout(async () => {
+      try {
+        await saveDocument(editor!.getDocument());
+        updateSaveStatus('Saved');
+      } catch {
+        updateSaveStatus('Save failed');
+      }
+    }, 500);
+  });
 
   editor = new Editor(editorEl, doc);
   toolbar = new Toolbar(toolbarEl, editor);

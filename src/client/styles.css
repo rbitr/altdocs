@@ -227,3 +227,75 @@ body {
   text-align: center;
   padding: 2rem;
 }
+
+/* Document title input (editor view) */
+.doc-title-input {
+  display: block;
+  width: 100%;
+  font-size: 1.5rem;
+  font-weight: 600;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 4px 0;
+  margin-bottom: 8px;
+  outline: none;
+  background: transparent;
+  color: #333;
+  font-family: inherit;
+}
+
+.doc-title-input:focus {
+  border-bottom-color: #4a90d9;
+}
+
+.doc-title-input::placeholder {
+  color: #bbb;
+  font-weight: 400;
+}
+
+/* Document list item layout */
+.doc-item-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.doc-title-untitled {
+  color: #999 !important;
+  font-style: italic;
+}
+
+.doc-item-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.doc-action-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  color: #555;
+  font-family: inherit;
+}
+
+.doc-action-btn:hover {
+  background: #f0f0f0;
+  border-color: #ccc;
+}
+
+.doc-action-btn-danger {
+  color: #c0392b;
+}
+
+.doc-action-btn-danger:hover {
+  background: #fdecea;
+  border-color: #e74c3c;
+  color: #e74c3c;
+}

@@ -57,3 +57,21 @@ export async function createNewDocument(id: string, title: string): Promise<Docu
   if (!res.ok) throw new Error(`Failed to create document: ${res.status}`);
   return res.json();
 }
+
+export async function deleteDocumentById(id: string): Promise<void> {
+  const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`Failed to delete document: ${res.status}`);
+}
+
+export async function duplicateDocument(sourceId: string, newId: string, newTitle: string): Promise<DocumentRecord> {
+  const source = await fetchDocument(sourceId);
+  const res = await fetchWithTimeout(BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: newId, title: newTitle, content: source.content }),
+  });
+  if (!res.ok) throw new Error(`Failed to duplicate document: ${res.status}`);
+  return res.json();
+}
