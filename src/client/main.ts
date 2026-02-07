@@ -1,4 +1,4 @@
-import { renderDocument } from './renderer.js';
+import { Editor } from './editor.js';
 import type { Document } from '../shared/model.js';
 
 const sampleDoc: Document = {
@@ -18,16 +18,26 @@ const sampleDoc: Document = {
       runs: [
         { text: 'A ', style: {} },
         { text: 'from-scratch', style: { bold: true } },
-        { text: ' document editor.', style: {} },
+        { text: ' document editor. Start typing!', style: {} },
       ],
+    },
+    {
+      id: 'b3',
+      type: 'paragraph',
+      alignment: 'left',
+      runs: [{ text: '', style: {} }],
     },
   ],
 };
 
 const app = document.getElementById('app');
 if (app) {
-  const editor = document.createElement('div');
-  editor.className = 'altdocs-editor';
-  app.appendChild(editor);
-  renderDocument(sampleDoc, editor);
+  const editorEl = document.createElement('div');
+  editorEl.className = 'altdocs-editor';
+  app.appendChild(editorEl);
+
+  const editor = new Editor(editorEl, sampleDoc);
+
+  // Expose editor for debugging in browser console
+  (window as any).__editor = editor;
 }

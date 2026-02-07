@@ -1,0 +1,386 @@
+import type { Document, Operation, Position, TextStyle } from '../shared/model.js';
+import { applyOperation, blockTextLength, createEmptyDocument } from '../shared/model.js';
+import type { CursorState } from '../shared/cursor.js';
+import {
+  collapsedCursor,
+  isCollapsed,
+  getSelectionRange,
+  moveLeft,
+  moveRight,
+  moveUp,
+  moveDown,
+  moveToLineStart,
+  moveToLineEnd,
+  moveToDocStart,
+  moveToDocEnd,
+  selectAll,
+} from '../shared/cursor.js';
+import { renderDocument } from './renderer.js';
+import { applyCursorToDOM, readCursorFromDOM, resolveDocumentPosition } from './cursor-renderer.js';
+
+export class Editor {
+  public doc: Document;
+  public cursor: CursorState;
+  private container: HTMLElement;
+  private rendering = false;
+
+  constructor(container: HTMLElement, doc?: Document) {
+    this.container = container;
+    this.doc = doc || createEmptyDocument('new-doc', 'Untitled');
+    this.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+
+    this.container.setAttribute('contenteditable', 'true');
+    this.container.setAttribute('spellcheck', 'false');
+    this.container.style.outline = 'none';
+    this.container.style.whiteSpace = 'pre-wrap';
+    this.container.style.wordBreak = 'break-word';
+
+    this.render();
+    this.bindEvents();
+  }
+
+  private render(): void {
+    this.rendering = true;
+    renderDocument(this.doc, this.container);
+    applyCursorToDOM(this.container, this.doc, this.cursor);
+    this.rendering = false;
+  }
+
+  private bindEvents(): void {
+    this.container.addEventListener('keydown', (e) => this.handleKeyDown(e));
+    this.container.addEventListener('beforeinput', (e) => this.handleBeforeInput(e as InputEvent));
+    this.container.addEventListener('mouseup', () => this.handleMouseUp());
+    this.container.addEventListener('click', (e) => this.handleClick(e));
+  }
+
+  private handleClick(e: MouseEvent): void {
+    this.syncCursorFromDOM();
+  }
+
+  private handleMouseUp(): void {
+    this.syncCursorFromDOM();
+  }
+
+  private syncCursorFromDOM(): void {
+    // Try to read cursor position immediately
+    const newCursor = readCursorFromDOM(this.container, this.doc);
+    if (newCursor) {
+      this.cursor = newCursor;
+    }
+    // Also schedule a delayed read in case the browser hasn't finished positioning
+    setTimeout(() => {
+      const delayedCursor = readCursorFromDOM(this.container, this.doc);
+      if (delayedCursor) {
+        this.cursor = delayedCursor;
+      }
+    }, 0);
+  }
+
+  handleKeyDown(e: KeyboardEvent): void {
+    const ctrl = e.ctrlKey || e.metaKey;
+    const shift = e.shiftKey;
+
+    // Formatting shortcuts
+    if (ctrl && !shift) {
+      switch (e.key.toLowerCase()) {
+        case 'b':
+          e.preventDefault();
+          this.toggleFormatting({ bold: true });
+          return;
+        case 'i':
+          e.preventDefault();
+          this.toggleFormatting({ italic: true });
+          return;
+        case 'u':
+          e.preventDefault();
+          this.toggleFormatting({ underline: true });
+          return;
+        case 'a':
+          e.preventDefault();
+          this.cursor = selectAll(this.doc);
+          applyCursorToDOM(this.container, this.doc, this.cursor);
+          return;
+      }
+    }
+
+    // Ctrl+Home / Ctrl+End
+    if (ctrl && e.key === 'Home') {
+      e.preventDefault();
+      this.cursor = moveToDocStart(shift, this.cursor);
+      applyCursorToDOM(this.container, this.doc, this.cursor);
+      return;
+    }
+    if (ctrl && e.key === 'End') {
+      e.preventDefault();
+      this.cursor = moveToDocEnd(this.doc, shift, this.cursor);
+      applyCursorToDOM(this.container, this.doc, this.cursor);
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowLeft':
+        e.preventDefault();
+        this.cursor = moveLeft(this.cursor, this.doc, shift);
+        applyCursorToDOM(this.container, this.doc, this.cursor);
+        return;
+
+      case 'ArrowRight':
+        e.preventDefault();
+        this.cursor = moveRight(this.cursor, this.doc, shift);
+        applyCursorToDOM(this.container, this.doc, this.cursor);
+        return;
+
+      case 'ArrowUp':
+        e.preventDefault();
+        this.cursor = moveUp(this.cursor, this.doc, shift);
+        applyCursorToDOM(this.container, this.doc, this.cursor);
+        return;
+
+      case 'ArrowDown':
+        e.preventDefault();
+        this.cursor = moveDown(this.cursor, this.doc, shift);
+        applyCursorToDOM(this.container, this.doc, this.cursor);
+        return;
+
+      case 'Home':
+        e.preventDefault();
+        this.cursor = moveToLineStart(this.cursor, shift);
+        applyCursorToDOM(this.container, this.doc, this.cursor);
+        return;
+
+      case 'End':
+        e.preventDefault();
+        this.cursor = moveToLineEnd(this.cursor, this.doc, shift);
+        applyCursorToDOM(this.container, this.doc, this.cursor);
+        return;
+
+      case 'Backspace':
+        e.preventDefault();
+        this.handleBackspace();
+        return;
+
+      case 'Delete':
+        e.preventDefault();
+        this.handleDelete();
+        return;
+
+      case 'Enter':
+        e.preventDefault();
+        this.handleEnter();
+        return;
+    }
+
+    // For printable characters not handled above, insert them directly.
+    // This handles cases where beforeinput doesn't fire (e.g., headless browsers).
+    if (!ctrl && !e.altKey && e.key.length === 1) {
+      e.preventDefault();
+      this.insertText(e.key);
+      return;
+    }
+  }
+
+  handleBeforeInput(e: InputEvent): void {
+    if (e.inputType === 'insertText' && e.data) {
+      e.preventDefault();
+      this.insertText(e.data);
+    }
+    // Other input types (insertParagraph, etc.) are handled by keydown
+  }
+
+  insertText(text: string): void {
+    // If there's a selection, delete it first
+    if (!isCollapsed(this.cursor)) {
+      this.deleteSelection();
+    }
+
+    const op: Operation = {
+      type: 'insert_text',
+      position: { ...this.cursor.focus },
+      text,
+    };
+    this.doc = applyOperation(this.doc, op);
+
+    // Move cursor forward by the inserted text length
+    this.cursor = collapsedCursor({
+      blockIndex: this.cursor.focus.blockIndex,
+      offset: this.cursor.focus.offset + text.length,
+    });
+
+    this.render();
+  }
+
+  private handleBackspace(): void {
+    if (!isCollapsed(this.cursor)) {
+      this.deleteSelection();
+      this.render();
+      return;
+    }
+
+    const pos = this.cursor.focus;
+
+    if (pos.offset > 0) {
+      // Delete character before cursor
+      const op: Operation = {
+        type: 'delete_text',
+        range: {
+          start: { blockIndex: pos.blockIndex, offset: pos.offset - 1 },
+          end: { blockIndex: pos.blockIndex, offset: pos.offset },
+        },
+      };
+      this.doc = applyOperation(this.doc, op);
+      this.cursor = collapsedCursor({
+        blockIndex: pos.blockIndex,
+        offset: pos.offset - 1,
+      });
+    } else if (pos.blockIndex > 0) {
+      // At start of block — merge with previous
+      const prevBlockLen = blockTextLength(this.doc.blocks[pos.blockIndex - 1]);
+      const op: Operation = {
+        type: 'merge_block',
+        blockIndex: pos.blockIndex,
+      };
+      this.doc = applyOperation(this.doc, op);
+      this.cursor = collapsedCursor({
+        blockIndex: pos.blockIndex - 1,
+        offset: prevBlockLen,
+      });
+    }
+
+    this.render();
+  }
+
+  private handleDelete(): void {
+    if (!isCollapsed(this.cursor)) {
+      this.deleteSelection();
+      this.render();
+      return;
+    }
+
+    const pos = this.cursor.focus;
+    const blockLen = blockTextLength(this.doc.blocks[pos.blockIndex]);
+
+    if (pos.offset < blockLen) {
+      // Delete character after cursor
+      const op: Operation = {
+        type: 'delete_text',
+        range: {
+          start: { blockIndex: pos.blockIndex, offset: pos.offset },
+          end: { blockIndex: pos.blockIndex, offset: pos.offset + 1 },
+        },
+      };
+      this.doc = applyOperation(this.doc, op);
+      // Cursor stays in place
+    } else if (pos.blockIndex < this.doc.blocks.length - 1) {
+      // At end of block — merge next block into this one
+      const op: Operation = {
+        type: 'merge_block',
+        blockIndex: pos.blockIndex + 1,
+      };
+      this.doc = applyOperation(this.doc, op);
+      // Cursor stays in place
+    }
+
+    this.render();
+  }
+
+  private handleEnter(): void {
+    // If there's a selection, delete it first
+    if (!isCollapsed(this.cursor)) {
+      this.deleteSelection();
+    }
+
+    const op: Operation = {
+      type: 'split_block',
+      position: { ...this.cursor.focus },
+    };
+    this.doc = applyOperation(this.doc, op);
+
+    // Move cursor to start of new block
+    this.cursor = collapsedCursor({
+      blockIndex: this.cursor.focus.blockIndex + 1,
+      offset: 0,
+    });
+
+    this.render();
+  }
+
+  private deleteSelection(): void {
+    const range = getSelectionRange(this.cursor);
+    const op: Operation = {
+      type: 'delete_text',
+      range,
+    };
+    this.doc = applyOperation(this.doc, op);
+    this.cursor = collapsedCursor(range.start);
+  }
+
+  toggleFormatting(style: Partial<TextStyle>): void {
+    if (isCollapsed(this.cursor)) return; // No selection to format
+
+    const range = getSelectionRange(this.cursor);
+
+    // Check if the selection already has this formatting
+    // Simple approach: check the first character's style
+    const hasFormatting = this.selectionHasFormatting(style);
+
+    if (hasFormatting) {
+      const op: Operation = {
+        type: 'remove_formatting',
+        range,
+        style,
+      };
+      this.doc = applyOperation(this.doc, op);
+    } else {
+      const op: Operation = {
+        type: 'apply_formatting',
+        range,
+        style,
+      };
+      this.doc = applyOperation(this.doc, op);
+    }
+
+    this.render();
+  }
+
+  private selectionHasFormatting(style: Partial<TextStyle>): boolean {
+    const range = getSelectionRange(this.cursor);
+
+    // Check the first run that overlaps with the selection start
+    const block = this.doc.blocks[range.start.blockIndex];
+    if (!block) return false;
+
+    let offset = 0;
+    for (const run of block.runs) {
+      const runEnd = offset + run.text.length;
+      if (runEnd > range.start.offset) {
+        // This run overlaps with the selection start
+        for (const [key, value] of Object.entries(style)) {
+          if (value && !run.style[key as keyof TextStyle]) {
+            return false;
+          }
+        }
+        return true;
+      }
+      offset = runEnd;
+    }
+
+    return false;
+  }
+
+  /** Get the current document (for external use) */
+  getDocument(): Document {
+    return this.doc;
+  }
+
+  /** Get the current cursor state (for external use) */
+  getCursor(): CursorState {
+    return this.cursor;
+  }
+
+  /** Set the document and re-render */
+  setDocument(doc: Document): void {
+    this.doc = doc;
+    this.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    this.render();
+  }
+}

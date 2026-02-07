@@ -1,4 +1,5 @@
 import type { Document, Block, TextRun, BlockType } from '../shared/model.js';
+import { blockTextLength } from '../shared/model.js';
 
 /** Map from BlockType to the HTML tag used to render it */
 const BLOCK_TAG_MAP: Record<BlockType, string> = {
@@ -38,8 +39,14 @@ function renderBlock(block: Block): HTMLElement {
     el.style.textAlign = block.alignment;
   }
 
-  for (const run of block.runs) {
-    el.appendChild(renderRun(run));
+  const isEmpty = blockTextLength(block) === 0;
+  if (isEmpty) {
+    // Empty blocks need a <br> to be visible and allow caret placement
+    el.appendChild(document.createElement('br'));
+  } else {
+    for (const run of block.runs) {
+      el.appendChild(renderRun(run));
+    }
   }
 
   return el;
