@@ -12,6 +12,7 @@ import {
   createEmptyDocument,
   createBlock,
   resetBlockIdCounter,
+  getTextInRange,
 } from '../src/shared/model.js';
 
 // ============================================================
@@ -918,5 +919,83 @@ describe('edge cases', () => {
       }
       plainSoFar.push(run.text);
     }
+  });
+});
+
+// ============================================================
+// getTextInRange
+// ============================================================
+
+describe('getTextInRange', () => {
+  it('extracts text from a single block', () => {
+    const doc = makeDoc([makeBlock('hello world')]);
+    const text = getTextInRange(doc, {
+      start: { blockIndex: 0, offset: 0 },
+      end: { blockIndex: 0, offset: 5 },
+    });
+    expect(text).toBe('hello');
+  });
+
+  it('extracts text from middle of a single block', () => {
+    const doc = makeDoc([makeBlock('hello world')]);
+    const text = getTextInRange(doc, {
+      start: { blockIndex: 0, offset: 6 },
+      end: { blockIndex: 0, offset: 11 },
+    });
+    expect(text).toBe('world');
+  });
+
+  it('extracts text across two blocks', () => {
+    const doc = makeDoc([makeBlock('hello'), makeBlock('world')]);
+    const text = getTextInRange(doc, {
+      start: { blockIndex: 0, offset: 3 },
+      end: { blockIndex: 1, offset: 3 },
+    });
+    expect(text).toBe('lo\nwor');
+  });
+
+  it('extracts text across three blocks', () => {
+    const doc = makeDoc([makeBlock('aaa'), makeBlock('bbb'), makeBlock('ccc')]);
+    const text = getTextInRange(doc, {
+      start: { blockIndex: 0, offset: 1 },
+      end: { blockIndex: 2, offset: 2 },
+    });
+    expect(text).toBe('aa\nbbb\ncc');
+  });
+
+  it('extracts full blocks', () => {
+    const doc = makeDoc([makeBlock('hello'), makeBlock('world')]);
+    const text = getTextInRange(doc, {
+      start: { blockIndex: 0, offset: 0 },
+      end: { blockIndex: 1, offset: 5 },
+    });
+    expect(text).toBe('hello\nworld');
+  });
+
+  it('returns empty string for zero-width range', () => {
+    const doc = makeDoc([makeBlock('hello')]);
+    const text = getTextInRange(doc, {
+      start: { blockIndex: 0, offset: 3 },
+      end: { blockIndex: 0, offset: 3 },
+    });
+    expect(text).toBe('');
+  });
+
+  it('works with multiple runs in a block', () => {
+    const doc = makeDoc([{
+      id: 'b1',
+      type: 'paragraph' as const,
+      alignment: 'left' as const,
+      runs: [
+        { text: 'hello ', style: {} },
+        { text: 'bold', style: { bold: true } },
+        { text: ' world', style: {} },
+      ],
+    }]);
+    const text = getTextInRange(doc, {
+      start: { blockIndex: 0, offset: 4 },
+      end: { blockIndex: 0, offset: 14 },
+    });
+    expect(text).toBe('o bold wor');
   });
 });

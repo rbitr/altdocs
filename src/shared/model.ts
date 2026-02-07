@@ -503,6 +503,39 @@ function applyChangeBlockAlignment(doc: Document, op: ChangeBlockAlignmentOp): D
 }
 
 // ============================================================
+// Text Extraction
+// ============================================================
+
+/** Extract plain text from a range within the document */
+export function getTextInRange(doc: Document, range: Range): string {
+  const { start, end } = range;
+
+  if (start.blockIndex === end.blockIndex) {
+    // Single block
+    const text = blockToPlainText(doc.blocks[start.blockIndex]);
+    return text.slice(start.offset, end.offset);
+  }
+
+  // Multi-block: first block (from offset to end) + middle blocks + last block (from start to offset)
+  const parts: string[] = [];
+
+  // First block: from start.offset to end
+  const firstText = blockToPlainText(doc.blocks[start.blockIndex]);
+  parts.push(firstText.slice(start.offset));
+
+  // Middle blocks: full text
+  for (let i = start.blockIndex + 1; i < end.blockIndex; i++) {
+    parts.push(blockToPlainText(doc.blocks[i]));
+  }
+
+  // Last block: from start to end.offset
+  const lastText = blockToPlainText(doc.blocks[end.blockIndex]);
+  parts.push(lastText.slice(0, end.offset));
+
+  return parts.join('\n');
+}
+
+// ============================================================
 // Factory Functions
 // ============================================================
 

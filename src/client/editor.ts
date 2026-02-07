@@ -1,5 +1,5 @@
 import type { Document, Operation, Position, TextStyle, BlockType, Alignment } from '../shared/model.js';
-import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument } from '../shared/model.js';
+import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange } from '../shared/model.js';
 import type { CursorState } from '../shared/cursor.js';
 import {
   collapsedCursor,
@@ -78,6 +78,9 @@ export class Editor {
     this.container.addEventListener('beforeinput', (e) => this.handleBeforeInput(e as InputEvent));
     this.container.addEventListener('mouseup', () => this.handleMouseUp());
     this.container.addEventListener('click', (e) => this.handleClick(e));
+    this.container.addEventListener('copy', (e) => this.handleCopy(e));
+    this.container.addEventListener('cut', (e) => this.handleCut(e));
+    this.container.addEventListener('paste', (e) => this.handlePaste(e));
   }
 
   private handleClick(e: MouseEvent): void {
@@ -234,6 +237,107 @@ export class Editor {
       this.insertText(e.data);
     }
     // Other input types (insertParagraph, etc.) are handled by keydown
+  }
+
+  /** Get the selected text as plain text */
+  getSelectedText(): string {
+    if (isCollapsed(this.cursor)) return '';
+    const range = getSelectionRange(this.cursor);
+    return getTextInRange(this.doc, range);
+  }
+
+  private handleCopy(e: ClipboardEvent): void {
+    if (isCollapsed(this.cursor)) return;
+    e.preventDefault();
+    const text = this.getSelectedText();
+    e.clipboardData?.setData('text/plain', text);
+  }
+
+  private handleCut(e: ClipboardEvent): void {
+    if (isCollapsed(this.cursor)) return;
+    e.preventDefault();
+    const text = this.getSelectedText();
+    e.clipboardData?.setData('text/plain', text);
+
+    this.pushHistory();
+    this.deleteSelection();
+    this.render();
+  }
+
+  private handlePaste(e: ClipboardEvent): void {
+    e.preventDefault();
+    const text = e.clipboardData?.getData('text/plain');
+    if (!text) return;
+    this.pasteText(text);
+  }
+
+  /** Paste plain text, splitting on newlines to create new blocks */
+  pasteText(text: string): void {
+    this.pushHistory();
+
+    // Delete selection if present
+    if (!isCollapsed(this.cursor)) {
+      this.deleteSelection();
+    }
+
+    const lines = text.split('\n');
+
+    if (lines.length === 1) {
+      // Single line paste — just insert text
+      const op: Operation = {
+        type: 'insert_text',
+        position: { ...this.cursor.focus },
+        text: lines[0],
+      };
+      this.doc = applyOperation(this.doc, op);
+      this.cursor = collapsedCursor({
+        blockIndex: this.cursor.focus.blockIndex,
+        offset: this.cursor.focus.offset + lines[0].length,
+      });
+    } else {
+      // Multi-line paste: insert first line, split, insert subsequent lines
+      let currentBlockIndex = this.cursor.focus.blockIndex;
+      let currentOffset = this.cursor.focus.offset;
+
+      // Insert first line at current position
+      if (lines[0].length > 0) {
+        const op: Operation = {
+          type: 'insert_text',
+          position: { blockIndex: currentBlockIndex, offset: currentOffset },
+          text: lines[0],
+        };
+        this.doc = applyOperation(this.doc, op);
+        currentOffset += lines[0].length;
+      }
+
+      // For each subsequent line, split the block and insert text
+      for (let i = 1; i < lines.length; i++) {
+        const splitOp: Operation = {
+          type: 'split_block',
+          position: { blockIndex: currentBlockIndex, offset: currentOffset },
+        };
+        this.doc = applyOperation(this.doc, splitOp);
+        currentBlockIndex++;
+        currentOffset = 0;
+
+        if (lines[i].length > 0) {
+          const insertOp: Operation = {
+            type: 'insert_text',
+            position: { blockIndex: currentBlockIndex, offset: 0 },
+            text: lines[i],
+          };
+          this.doc = applyOperation(this.doc, insertOp);
+          currentOffset = lines[i].length;
+        }
+      }
+
+      this.cursor = collapsedCursor({
+        blockIndex: currentBlockIndex,
+        offset: currentOffset,
+      });
+    }
+
+    this.render();
   }
 
   private pushHistory(): void {

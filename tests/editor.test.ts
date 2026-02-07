@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Editor } from '../src/client/editor.js';
 import type { Document, Block } from '../src/shared/model.js';
 import { blockToPlainText } from '../src/shared/model.js';
-import { collapsedCursor, isCollapsed } from '../src/shared/cursor.js';
+import { collapsedCursor, isCollapsed, getSelectionRange } from '../src/shared/cursor.js';
 
 // ============================================================
 // Helpers
@@ -671,5 +671,161 @@ describe('Editor - onUpdate callback', () => {
     editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
     editor.changeBlockType('heading1');
     expect(callCount).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================
+// Clipboard operations
+// ============================================================
+
+describe('Editor - getSelectedText', () => {
+  it('returns empty string with collapsed cursor', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    expect(editor.getSelectedText()).toBe('');
+  });
+
+  it('returns selected text within a single block', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello world')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    expect(editor.getSelectedText()).toBe('hello');
+  });
+
+  it('returns selected text across multiple blocks', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello'), makeBlock('world')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 3 },
+      focus: { blockIndex: 1, offset: 3 },
+    };
+    expect(editor.getSelectedText()).toBe('lo\nwor');
+  });
+
+  it('works with backward selection', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello world')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 11 },
+      focus: { blockIndex: 0, offset: 6 },
+    };
+    expect(editor.getSelectedText()).toBe('world');
+  });
+});
+
+describe('Editor - pasteText (single line)', () => {
+  it('pastes text at cursor position', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.pasteText(' world');
+    expect(getBlockText(editor, 0)).toBe('hello world');
+    expect(editor.cursor.focus).toEqual({ blockIndex: 0, offset: 11 });
+  });
+
+  it('pastes text at the beginning', () => {
+    const editor = createEditor(makeDoc([makeBlock('world')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.pasteText('hello ');
+    expect(getBlockText(editor, 0)).toBe('hello world');
+    expect(editor.cursor.focus).toEqual({ blockIndex: 0, offset: 6 });
+  });
+
+  it('replaces selection when pasting', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello world')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.pasteText('goodbye');
+    expect(getBlockText(editor, 0)).toBe('goodbye world');
+    expect(editor.cursor.focus).toEqual({ blockIndex: 0, offset: 7 });
+  });
+});
+
+describe('Editor - pasteText (multi-line)', () => {
+  it('splits into multiple blocks on newlines', () => {
+    const editor = createEditor(makeDoc([makeBlock('')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.pasteText('line1\nline2\nline3');
+    expect(editor.doc.blocks).toHaveLength(3);
+    expect(getBlockText(editor, 0)).toBe('line1');
+    expect(getBlockText(editor, 1)).toBe('line2');
+    expect(getBlockText(editor, 2)).toBe('line3');
+    expect(editor.cursor.focus).toEqual({ blockIndex: 2, offset: 5 });
+  });
+
+  it('inserts multi-line text in the middle of existing text', () => {
+    const editor = createEditor(makeDoc([makeBlock('helloworld')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.pasteText('\n');
+    expect(editor.doc.blocks).toHaveLength(2);
+    expect(getBlockText(editor, 0)).toBe('hello');
+    expect(getBlockText(editor, 1)).toBe('world');
+    expect(editor.cursor.focus).toEqual({ blockIndex: 1, offset: 0 });
+  });
+
+  it('handles paste with trailing newline', () => {
+    const editor = createEditor(makeDoc([makeBlock('')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
+    editor.pasteText('hello\n');
+    expect(editor.doc.blocks).toHaveLength(2);
+    expect(getBlockText(editor, 0)).toBe('hello');
+    expect(getBlockText(editor, 1)).toBe('');
+    expect(editor.cursor.focus).toEqual({ blockIndex: 1, offset: 0 });
+  });
+
+  it('handles multi-line paste replacing a selection', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello world')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 5 },
+      focus: { blockIndex: 0, offset: 11 },
+    };
+    editor.pasteText('\nfoo\nbar');
+    expect(editor.doc.blocks).toHaveLength(3);
+    expect(getBlockText(editor, 0)).toBe('hello');
+    expect(getBlockText(editor, 1)).toBe('foo');
+    expect(getBlockText(editor, 2)).toBe('bar');
+  });
+
+  it('handles multi-line paste into middle of existing blocks', () => {
+    const editor = createEditor(makeDoc([makeBlock('abcdef')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 3 });
+    editor.pasteText('X\nY');
+    expect(editor.doc.blocks).toHaveLength(2);
+    expect(getBlockText(editor, 0)).toBe('abcX');
+    expect(getBlockText(editor, 1)).toBe('Ydef');
+    expect(editor.cursor.focus).toEqual({ blockIndex: 1, offset: 1 });
+  });
+});
+
+describe('Editor - clipboard undo/redo', () => {
+  it('undoes a single-line paste', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.pasteText(' world');
+    expect(getBlockText(editor, 0)).toBe('hello world');
+
+    editor.undo();
+    expect(getBlockText(editor, 0)).toBe('hello');
+  });
+
+  it('undoes a multi-line paste', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.pasteText('\nworld\nfoo');
+    expect(editor.doc.blocks).toHaveLength(3);
+
+    editor.undo();
+    expect(editor.doc.blocks).toHaveLength(1);
+    expect(getBlockText(editor, 0)).toBe('hello');
+  });
+
+  it('redoes a paste after undo', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 5 });
+    editor.pasteText(' world');
+    editor.undo();
+    editor.redo();
+    expect(getBlockText(editor, 0)).toBe('hello world');
   });
 });
