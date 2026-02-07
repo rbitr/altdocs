@@ -3,6 +3,7 @@ import { Toolbar } from './toolbar.js';
 import { createEmptyDocument } from '../shared/model.js';
 import type { Document } from '../shared/model.js';
 import { fetchDocumentList, fetchDocument, saveDocument, deleteDocumentById, duplicateDocument } from './api-client.js';
+import { toast } from './toast.js';
 
 let editor: Editor | null = null;
 let toolbar: Toolbar | null = null;
@@ -25,6 +26,7 @@ async function doAutoSave(): Promise<void> {
   const doc = editor.getDocument();
   const currentJSON = JSON.stringify(doc.blocks);
   if (currentJSON === lastSavedJSON) return; // No changes
+  updateSaveStatus('Saving...');
   try {
     await saveDocument(doc);
     lastSavedJSON = currentJSON;
@@ -36,11 +38,21 @@ async function doAutoSave(): Promise<void> {
 
 function updateSaveStatus(text: string): void {
   const el = document.getElementById('save-status');
-  if (el) el.textContent = text;
+  if (!el) return;
+  el.textContent = text;
+  el.className = '';
+  if (text === 'Saving...') {
+    el.classList.add('save-status-saving');
+  } else if (text === 'Save failed') {
+    el.classList.add('save-status-error');
+  }
   if (text === 'Saved') {
     setTimeout(() => {
       const el2 = document.getElementById('save-status');
-      if (el2 && el2.textContent === 'Saved') el2.textContent = '';
+      if (el2 && el2.textContent === 'Saved') {
+        el2.textContent = '';
+        el2.className = '';
+      }
     }, 2000);
   }
 }
@@ -49,6 +61,18 @@ function getDocIdFromHash(): string | null {
   const hash = window.location.hash;
   const match = hash.match(/^#\/doc\/(.+)$/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function createLoadingIndicator(message = 'Loading...'): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'loading-container';
+  const spinner = document.createElement('div');
+  spinner.className = 'loading-spinner';
+  container.appendChild(spinner);
+  const label = document.createElement('span');
+  label.textContent = message;
+  container.appendChild(label);
+  return container;
 }
 
 async function renderDocumentList(container: HTMLElement): Promise<void> {
@@ -68,8 +92,13 @@ async function renderDocumentList(container: HTMLElement): Promise<void> {
   header.appendChild(newBtn);
   container.appendChild(header);
 
+  // Show loading indicator while fetching
+  const loading = createLoadingIndicator('Loading documents...');
+  container.appendChild(loading);
+
   try {
     const docs = await fetchDocumentList();
+    loading.remove();
     if (docs.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'doc-list-empty';
@@ -111,13 +140,18 @@ async function renderDocumentList(container: HTMLElement): Promise<void> {
         dupBtn.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
+          dupBtn.disabled = true;
+          dupBtn.textContent = 'Duplicating...';
           const newId = generateId();
           const newTitle = (doc.title || 'Untitled') + ' (Copy)';
           try {
             await duplicateDocument(doc.id, newId, newTitle);
+            toast('Document duplicated', 'success');
             await renderDocumentList(container);
           } catch {
-            // Silently fail — server may be down
+            dupBtn.disabled = false;
+            dupBtn.textContent = 'Duplicate';
+            toast('Failed to duplicate document', 'error');
           }
         });
         actions.appendChild(dupBtn);
@@ -130,11 +164,16 @@ async function renderDocumentList(container: HTMLElement): Promise<void> {
           e.preventDefault();
           e.stopPropagation();
           if (!confirm(`Delete "${doc.title || 'Untitled'}"? This cannot be undone.`)) return;
+          delBtn.disabled = true;
+          delBtn.textContent = 'Deleting...';
           try {
             await deleteDocumentById(doc.id);
+            toast('Document deleted', 'success');
             await renderDocumentList(container);
           } catch {
-            // Silently fail
+            delBtn.disabled = false;
+            delBtn.textContent = 'Delete';
+            toast('Failed to delete document', 'error');
           }
         });
         actions.appendChild(delBtn);
@@ -145,7 +184,9 @@ async function renderDocumentList(container: HTMLElement): Promise<void> {
       container.appendChild(list);
     }
   } catch {
+    loading.remove();
     const err = document.createElement('p');
+    err.className = 'doc-list-empty';
     err.textContent = 'Could not load documents. Is the server running?';
     container.appendChild(err);
   }
@@ -169,6 +210,28 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   statusBar.appendChild(saveStatus);
   container.appendChild(statusBar);
 
+  // Show loading indicator while fetching document
+  const loading = createLoadingIndicator('Loading document...');
+  container.appendChild(loading);
+
+  // Load or create document
+  let doc: Document;
+  try {
+    const record = await fetchDocument(docId);
+    const blocks = JSON.parse(record.content);
+    doc = { id: record.id, title: record.title, blocks };
+    // If blocks are empty, create a default block
+    if (doc.blocks.length === 0) {
+      doc = createEmptyDocument(docId, record.title);
+    }
+  } catch {
+    // Document doesn't exist yet — create a new one
+    doc = createEmptyDocument(docId, 'Untitled');
+  }
+
+  // Remove loading indicator and render editor UI
+  loading.remove();
+
   // Title input
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
@@ -186,21 +249,6 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   editorEl.className = 'altdocs-editor';
   container.appendChild(editorEl);
 
-  // Load or create document
-  let doc: Document;
-  try {
-    const record = await fetchDocument(docId);
-    const blocks = JSON.parse(record.content);
-    doc = { id: record.id, title: record.title, blocks };
-    // If blocks are empty, create a default block
-    if (doc.blocks.length === 0) {
-      doc = createEmptyDocument(docId, record.title);
-    }
-  } catch {
-    // Document doesn't exist yet — create a new one
-    doc = createEmptyDocument(docId, 'Untitled');
-  }
-
   // Set title
   titleInput.value = doc.title === 'Untitled' ? '' : doc.title;
 
@@ -213,6 +261,7 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
     // Debounce title save
     if (titleSaveTimer) clearTimeout(titleSaveTimer);
     titleSaveTimer = setTimeout(async () => {
+      updateSaveStatus('Saving...');
       try {
         await saveDocument(editor!.getDocument());
         updateSaveStatus('Saved');
