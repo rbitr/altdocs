@@ -16,7 +16,42 @@ body {
   padding: 2rem;
 }
 
-h1 {
+/* Document editor styles */
+.altdocs-editor {
+  min-height: 400px;
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  line-height: 1.6;
+}
+
+.altdocs-editor p {
+  margin-bottom: 0.5em;
+  min-height: 1.6em;
+}
+
+.altdocs-editor h1 {
   font-size: 2rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5em;
+}
+
+.altdocs-editor h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5em;
+}
+
+.altdocs-editor h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5em;
+}
+
+.altdocs-editor ul,
+.altdocs-editor ol {
+  margin-left: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.altdocs-editor li {
+  margin-bottom: 0.25em;
 }
