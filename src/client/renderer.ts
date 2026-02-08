@@ -83,6 +83,10 @@ function renderBlock(block: Block): HTMLElement {
     el.style.textAlign = block.alignment;
   }
 
+  if (block.lineSpacing) {
+    el.style.lineHeight = String(block.lineSpacing);
+  }
+
   // For non-list blocks, apply indent as margin-left via data attribute
   const indent = getIndentLevel(block);
   if (indent > 0 && block.type !== 'bullet-list-item' && block.type !== 'numbered-list-item') {

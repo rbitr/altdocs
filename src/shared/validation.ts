@@ -63,6 +63,13 @@ function validateBlock(block: unknown, index: number): string | null {
     }
   }
 
+  // lineSpacing is optional but must be a valid value if present
+  if (b.lineSpacing !== undefined) {
+    if (typeof b.lineSpacing !== 'number' || ![1.0, 1.15, 1.5, 2.0].includes(b.lineSpacing)) {
+      return `Block ${index}: 'lineSpacing' must be one of: 1, 1.15, 1.5, 2`;
+    }
+  }
+
   // imageUrl is optional but must be a string if present
   if (b.imageUrl !== undefined) {
     if (typeof b.imageUrl !== 'string') {

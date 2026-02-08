@@ -33,11 +33,16 @@ export interface TextRun {
   style: TextStyle;
 }
 
+export type LineSpacing = 1.0 | 1.15 | 1.5 | 2.0;
+
+export const VALID_LINE_SPACINGS: readonly number[] = [1.0, 1.15, 1.5, 2.0];
+
 export interface Block {
   id: string;
   type: BlockType;
   alignment: Alignment;
   indentLevel?: number;
+  lineSpacing?: LineSpacing;
   imageUrl?: string;
   runs: TextRun[];
 }
@@ -133,6 +138,12 @@ export interface SetImageOp {
   imageUrl: string;
 }
 
+export interface SetLineSpacingOp {
+  type: 'set_line_spacing';
+  blockIndex: number;
+  lineSpacing: LineSpacing;
+}
+
 export type Operation =
   | InsertTextOp
   | DeleteTextOp
@@ -144,7 +155,8 @@ export type Operation =
   | ChangeBlockAlignmentOp
   | InsertBlockOp
   | SetIndentOp
-  | SetImageOp;
+  | SetImageOp
+  | SetLineSpacingOp;
 
 // ============================================================
 // Helper Functions
@@ -291,6 +303,9 @@ function cloneBlock(block: Block): Block {
   if (block.imageUrl !== undefined) {
     clone.imageUrl = block.imageUrl;
   }
+  if (block.lineSpacing !== undefined) {
+    clone.lineSpacing = block.lineSpacing;
+  }
   return clone;
 }
 
@@ -342,6 +357,8 @@ export function applyOperation(doc: Document, op: Operation): Document {
       return applySetIndent(result, op);
     case 'set_image':
       return applySetImage(result, op);
+    case 'set_line_spacing':
+      return applySetLineSpacing(result, op);
   }
 }
 
@@ -524,6 +541,7 @@ function applySplitBlock(doc: Document, op: SplitBlockOp): Document {
     type: 'paragraph',
     alignment: block.alignment,
     indentLevel: block.indentLevel,
+    lineSpacing: block.lineSpacing,
     runs: normalizeRuns(afterRuns),
   };
   if (newBlock.runs.length === 0) {
@@ -592,6 +610,13 @@ function applySetImage(doc: Document, op: SetImageOp): Document {
   const block = doc.blocks[op.blockIndex];
   if (!block) return doc;
   block.imageUrl = op.imageUrl;
+  return doc;
+}
+
+function applySetLineSpacing(doc: Document, op: SetLineSpacingOp): Document {
+  const block = doc.blocks[op.blockIndex];
+  if (!block) return doc;
+  block.lineSpacing = op.lineSpacing;
   return doc;
 }
 

@@ -1,5 +1,5 @@
 import type { Editor } from './editor.js';
-import type { BlockType, Alignment } from '../shared/model.js';
+import type { BlockType, Alignment, LineSpacing } from '../shared/model.js';
 import { ShortcutsPanel } from './shortcuts-panel.js';
 import { VersionPanel } from './version-panel.js';
 
@@ -126,6 +126,12 @@ export class Toolbar {
       this.editor.outdent();
       this.editor.focus();
     });
+
+    this.addSeparator();
+
+    // Line spacing group
+    const lineSpacingGroup = this.createGroup();
+    this.addLineSpacingSelect(lineSpacingGroup);
 
     this.addSeparator();
 
@@ -303,6 +309,38 @@ export class Toolbar {
     parent.appendChild(select);
   }
 
+  private addLineSpacingSelect(parent: HTMLElement): void {
+    const select = document.createElement('select');
+    select.className = 'toolbar-select';
+    select.title = 'Line spacing';
+    select.dataset.toolbarAction = 'line-spacing';
+
+    const options: Array<{ value: string; label: string }> = [
+      { value: '', label: 'Spacing' },
+      { value: '1', label: 'Single' },
+      { value: '1.15', label: '1.15' },
+      { value: '1.5', label: '1.5' },
+      { value: '2', label: 'Double' },
+    ];
+
+    for (const opt of options) {
+      const option = document.createElement('option');
+      option.value = opt.value;
+      option.textContent = opt.label;
+      select.appendChild(option);
+    }
+
+    select.addEventListener('change', () => {
+      const val = select.value;
+      if (val !== '') {
+        this.editor.setLineSpacing(Number(val) as LineSpacing);
+      }
+      this.editor.focus();
+    });
+
+    parent.appendChild(select);
+  }
+
   private addColorPicker(
     parent: HTMLElement,
     key: string,
@@ -453,6 +491,13 @@ export class Toolbar {
     if (highlightIndicator) {
       const activeBg = this.editor.getActiveBackgroundColor();
       highlightIndicator.style.backgroundColor = activeBg || 'transparent';
+    }
+
+    // Update line spacing select
+    const lineSpacingSelect = this.container.querySelector('[data-toolbar-action="line-spacing"]') as HTMLSelectElement | null;
+    if (lineSpacingSelect) {
+      const activeLineSpacing = this.editor.getActiveLineSpacing();
+      lineSpacingSelect.value = activeLineSpacing ? String(activeLineSpacing) : '';
     }
   }
 

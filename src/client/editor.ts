@@ -1,4 +1,4 @@
-import type { Document, Operation, Position, TextStyle, BlockType, Alignment } from '../shared/model.js';
+import type { Document, Operation, Position, TextStyle, BlockType, Alignment, LineSpacing } from '../shared/model.js';
 import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange, generateBlockId, getIndentLevel, MAX_INDENT_LEVEL } from '../shared/model.js';
 import { uploadImage } from './api-client.js';
 import type { CursorState } from '../shared/cursor.js';
@@ -911,6 +911,28 @@ export class Editor {
   getActiveIndentLevel(): number {
     const block = this.doc.blocks[this.cursor.focus.blockIndex];
     return block ? getIndentLevel(block) : 0;
+  }
+
+  /** Set the line spacing of the current block */
+  setLineSpacing(lineSpacing: LineSpacing): void {
+    const blockIndex = this.cursor.focus.blockIndex;
+    const block = this.doc.blocks[blockIndex];
+    if (!block) return;
+
+    this.pushHistory();
+    const op: Operation = {
+      type: 'set_line_spacing',
+      blockIndex,
+      lineSpacing,
+    };
+    this.applyLocal(op);
+    this.render();
+  }
+
+  /** Get the line spacing of the current block (undefined means default) */
+  getActiveLineSpacing(): LineSpacing | undefined {
+    const block = this.doc.blocks[this.cursor.focus.blockIndex];
+    return block?.lineSpacing;
   }
 
   /** Get the current formatting state at cursor/selection for toolbar display */

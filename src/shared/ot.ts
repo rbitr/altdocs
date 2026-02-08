@@ -29,6 +29,7 @@ import type {
   InsertBlockOp,
   SetIndentOp,
   SetImageOp,
+  SetLineSpacingOp,
 } from './model.js';
 
 // ============================================================
@@ -234,6 +235,8 @@ function transformWithPriority(
       return transformSetIndent(op, other);
     case 'set_image':
       return transformSetImage(op, other);
+    case 'set_line_spacing':
+      return transformSetLineSpacing(op, other);
   }
 }
 
@@ -677,6 +680,15 @@ function transformSetIndent(op: SetIndentOp, other: Operation): SetIndentOp {
 // ============================================================
 
 function transformSetImage(op: SetImageOp, other: Operation): SetImageOp {
+  const newIndex = transformBlockIndex(op.blockIndex, other);
+  return { ...op, blockIndex: newIndex };
+}
+
+// ============================================================
+// Transform set_line_spacing against other operations
+// ============================================================
+
+function transformSetLineSpacing(op: SetLineSpacingOp, other: Operation): SetLineSpacingOp {
   const newIndex = transformBlockIndex(op.blockIndex, other);
   return { ...op, blockIndex: newIndex };
 }
