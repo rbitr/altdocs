@@ -1006,7 +1006,13 @@ export class Editor {
 
   /** Clear active table cell (e.g. when clicking outside table) */
   clearActiveTableCell(): void {
-    this.activeTableCell = null;
+    if (this.activeTableCell) {
+      this.activeTableCell = null;
+      // Remove active-cell CSS class immediately (no full re-render needed)
+      this.container.querySelectorAll('td.active-cell').forEach((el) => {
+        el.classList.remove('active-cell');
+      });
+    }
   }
 
   /** Insert text into the active table cell */
