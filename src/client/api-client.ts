@@ -112,6 +112,14 @@ function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response>
   return fetch(url, { ...options, headers, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
+async function safeJson<T>(res: Response): Promise<T> {
+  try {
+    return await res.json();
+  } catch {
+    throw new Error(`Invalid JSON response from ${res.url} (status ${res.status})`);
+  }
+}
+
 // ── Auth API ────────────────────────────────────────
 
 export async function createSession(): Promise<SessionResponse> {
@@ -119,7 +127,7 @@ export async function createSession(): Promise<SessionResponse> {
     method: 'POST',
   });
   if (!res.ok) throw new Error(`Failed to create session: ${res.status}`);
-  const data: SessionResponse = await res.json();
+  const data: SessionResponse = await safeJson<SessionResponse>(res);
   setStoredToken(data.token);
   return data;
 }
@@ -132,7 +140,7 @@ export async function getMe(): Promise<UserInfo> {
     }
     throw new Error(`Failed to get user: ${res.status}`);
   }
-  return res.json();
+  return safeJson<UserInfo>(res);
 }
 
 export async function updateMe(displayName: string): Promise<UserInfo> {
@@ -142,7 +150,7 @@ export async function updateMe(displayName: string): Promise<UserInfo> {
     body: JSON.stringify({ display_name: displayName }),
   });
   if (!res.ok) throw new Error(`Failed to update user: ${res.status}`);
-  return res.json();
+  return safeJson<UserInfo>(res);
 }
 
 /** Ensure a session exists. Returns user info. Creates a new session if needed. */
@@ -164,13 +172,13 @@ export async function ensureSession(): Promise<UserInfo> {
 export async function fetchDocumentList(): Promise<DocumentListItem[]> {
   const res = await fetchWithTimeout(BASE);
   if (!res.ok) throw new Error(`Failed to list documents: ${res.status}`);
-  return res.json();
+  return safeJson<DocumentListItem[]>(res);
 }
 
 export async function fetchDocument(id: string): Promise<DocumentRecord> {
   const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error(`Failed to load document: ${res.status}`);
-  return res.json();
+  return safeJson<DocumentRecord>(res);
 }
 
 export async function saveDocument(doc: Document): Promise<DocumentRecord> {
@@ -183,7 +191,7 @@ export async function saveDocument(doc: Document): Promise<DocumentRecord> {
     }),
   });
   if (!res.ok) throw new Error(`Failed to save document: ${res.status}`);
-  return res.json();
+  return safeJson<DocumentRecord>(res);
 }
 
 export async function createNewDocument(id: string, title: string): Promise<DocumentRecord> {
@@ -193,7 +201,7 @@ export async function createNewDocument(id: string, title: string): Promise<Docu
     body: JSON.stringify({ id, title, content: '[]' }),
   });
   if (!res.ok) throw new Error(`Failed to create document: ${res.status}`);
-  return res.json();
+  return safeJson<DocumentRecord>(res);
 }
 
 export async function deleteDocumentById(id: string): Promise<void> {
@@ -222,13 +230,13 @@ export interface VersionRecord {
 export async function fetchVersions(docId: string): Promise<VersionListItem[]> {
   const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(docId)}/versions`);
   if (!res.ok) throw new Error(`Failed to list versions: ${res.status}`);
-  return res.json();
+  return safeJson<VersionListItem[]>(res);
 }
 
 export async function fetchVersion(docId: string, versionNumber: number): Promise<VersionRecord> {
   const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(docId)}/versions/${versionNumber}`);
   if (!res.ok) throw new Error(`Failed to load version: ${res.status}`);
-  return res.json();
+  return safeJson<VersionRecord>(res);
 }
 
 export async function restoreVersion(docId: string, versionNumber: number): Promise<DocumentRecord> {
@@ -236,7 +244,7 @@ export async function restoreVersion(docId: string, versionNumber: number): Prom
     method: 'POST',
   });
   if (!res.ok) throw new Error(`Failed to restore version: ${res.status}`);
-  return res.json();
+  return safeJson<DocumentRecord>(res);
 }
 
 export async function duplicateDocument(sourceId: string, newId: string, newTitle: string): Promise<DocumentRecord> {
@@ -247,7 +255,7 @@ export async function duplicateDocument(sourceId: string, newId: string, newTitl
     body: JSON.stringify({ id: newId, title: newTitle, content: source.content }),
   });
   if (!res.ok) throw new Error(`Failed to duplicate document: ${res.status}`);
-  return res.json();
+  return safeJson<DocumentRecord>(res);
 }
 
 // ── Sharing API ─────────────────────────────────────
@@ -259,13 +267,13 @@ export async function createShareLink(docId: string, permission: 'view' | 'edit'
     body: JSON.stringify({ permission }),
   });
   if (!res.ok) throw new Error(`Failed to create share: ${res.status}`);
-  return res.json();
+  return safeJson<ShareRecord>(res);
 }
 
 export async function fetchShares(docId: string): Promise<ShareRecord[]> {
   const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(docId)}/shares`);
   if (!res.ok) throw new Error(`Failed to list shares: ${res.status}`);
-  return res.json();
+  return safeJson<ShareRecord[]>(res);
 }
 
 export async function deleteShareLink(docId: string, shareId: string): Promise<void> {
@@ -278,7 +286,7 @@ export async function deleteShareLink(docId: string, shareId: string): Promise<v
 export async function fetchSharedDocument(token: string): Promise<SharedDocumentResponse> {
   const res = await fetchWithTimeout(`/api/shared/${encodeURIComponent(token)}`);
   if (!res.ok) throw new Error(`Failed to load shared document: ${res.status}`);
-  return res.json();
+  return safeJson<SharedDocumentResponse>(res);
 }
 
 // ── Upload API ──────────────────────────────────────
@@ -300,8 +308,8 @@ export async function uploadImage(file: File): Promise<UploadResponse> {
     signal: controller.signal,
   }).finally(() => clearTimeout(timer));
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: 'Upload failed' }));
+    const body = await safeJson<{ error?: string }>(res).catch(() => ({ error: 'Upload failed' }));
     throw new Error(body.error || `Upload failed: ${res.status}`);
   }
-  return res.json();
+  return safeJson<UploadResponse>(res);
 }

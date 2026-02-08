@@ -211,17 +211,27 @@ describe('validateContent', () => {
 
     it('rejects non-number fontSize', () => {
       const content = JSON.stringify([{ id: 'b1', type: 'paragraph', alignment: 'left', runs: [{ text: 'hi', style: { fontSize: '16px' } }] }]);
-      expect(validateContent(content)).toBe('Block 0, run 0: style.fontSize must be a positive number');
+      expect(validateContent(content)).toBe('Block 0, run 0: style.fontSize must be a number between 1 and 400');
     });
 
     it('rejects zero fontSize', () => {
       const content = JSON.stringify([{ id: 'b1', type: 'paragraph', alignment: 'left', runs: [{ text: 'hi', style: { fontSize: 0 } }] }]);
-      expect(validateContent(content)).toBe('Block 0, run 0: style.fontSize must be a positive number');
+      expect(validateContent(content)).toBe('Block 0, run 0: style.fontSize must be a number between 1 and 400');
     });
 
     it('rejects negative fontSize', () => {
       const content = JSON.stringify([{ id: 'b1', type: 'paragraph', alignment: 'left', runs: [{ text: 'hi', style: { fontSize: -12 } }] }]);
-      expect(validateContent(content)).toBe('Block 0, run 0: style.fontSize must be a positive number');
+      expect(validateContent(content)).toBe('Block 0, run 0: style.fontSize must be a number between 1 and 400');
+    });
+
+    it('rejects fontSize above upper bound', () => {
+      const content = JSON.stringify([{ id: 'b1', type: 'paragraph', alignment: 'left', runs: [{ text: 'hi', style: { fontSize: 500 } }] }]);
+      expect(validateContent(content)).toBe('Block 0, run 0: style.fontSize must be a number between 1 and 400');
+    });
+
+    it('accepts fontSize at upper bound', () => {
+      const content = JSON.stringify([{ id: 'b1', type: 'paragraph', alignment: 'left', runs: [{ text: 'hi', style: { fontSize: 400 } }] }]);
+      expect(validateContent(content)).toBeNull();
     });
 
     it('rejects non-string fontFamily', () => {

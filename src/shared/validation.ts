@@ -176,8 +176,8 @@ function validateRun(run: unknown, blockIndex: number, runIndex: number): string
   if (style.code !== undefined && typeof style.code !== 'boolean') {
     return `Block ${blockIndex}, run ${runIndex}: style.code must be a boolean`;
   }
-  if (style.fontSize !== undefined && (typeof style.fontSize !== 'number' || style.fontSize <= 0)) {
-    return `Block ${blockIndex}, run ${runIndex}: style.fontSize must be a positive number`;
+  if (style.fontSize !== undefined && (typeof style.fontSize !== 'number' || style.fontSize <= 0 || style.fontSize > 400)) {
+    return `Block ${blockIndex}, run ${runIndex}: style.fontSize must be a number between 1 and 400`;
   }
   if (style.fontFamily !== undefined && typeof style.fontFamily !== 'string') {
     return `Block ${blockIndex}, run ${runIndex}: style.fontFamily must be a string`;

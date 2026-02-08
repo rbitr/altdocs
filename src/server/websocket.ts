@@ -15,7 +15,8 @@ import { getSessionWithUser, getDocument, getShareByToken } from './db.js';
 import { transformSingle } from '../shared/ot.js';
 import type { Operation } from '../shared/model.js';
 import { applyOperation } from '../shared/model.js';
-import type { Document, Block } from '../shared/model.js';
+import type { Document } from '../shared/model.js';
+import { createEmptyDocument } from '../shared/model.js';
 import type { ClientMessage, ServerMessage } from '../shared/protocol.js';
 
 export type { ClientMessage, ServerMessage };
@@ -230,20 +231,17 @@ export class CollaborationServer {
     // Get or create room
     let room = this.rooms.get(documentId);
     if (!room) {
-      let blocks: Block[];
+      let doc: Document;
       try {
-        blocks = JSON.parse(docRecord.content);
+        const blocks = JSON.parse(docRecord.content);
+        doc = { id: docRecord.id, title: docRecord.title, blocks };
       } catch {
-        blocks = [{ id: 'block_1', type: 'paragraph', alignment: 'left', indentLevel: 0, runs: [{ text: '', style: {} }] }];
+        doc = createEmptyDocument(docRecord.id, docRecord.title);
       }
       room = {
         documentId,
         version: 0,
-        document: {
-          id: docRecord.id,
-          title: docRecord.title,
-          blocks,
-        },
+        document: doc,
         operations: [],
         clients: new Map(),
       };

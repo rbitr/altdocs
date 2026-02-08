@@ -515,10 +515,13 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
     shareBtn.addEventListener('click', () => {
       if (sharePanel && sharePanel.visible) {
         sharePanel.close();
-      } else {
-        sharePanel = new SharePanel(docId);
-        sharePanel.open();
+        return;
       }
+      if (sharePanel) {
+        sharePanel.close();
+      }
+      sharePanel = new SharePanel(docId);
+      sharePanel.open();
     });
     statusBar.appendChild(shareBtn);
   }
