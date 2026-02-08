@@ -25,7 +25,7 @@ let currentDocPermission: string | null = null;
 
 const AUTO_SAVE_DELAY = 2000; // 2 seconds after last change
 
-function generateId(): string {
+export function generateId(): string {
   return `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -49,7 +49,7 @@ async function doAutoSave(): Promise<void> {
   }
 }
 
-function updateSaveStatus(text: string): void {
+export function updateSaveStatus(text: string): void {
   const el = document.getElementById('save-status');
   if (!el) return;
   el.textContent = text;
@@ -71,7 +71,7 @@ function updateSaveStatus(text: string): void {
 }
 
 /** Parse doc ID and share token from hash: #/doc/{id}?share={token} */
-function parseHash(): { docId: string | null; shareToken: string | null } {
+export function parseHash(): { docId: string | null; shareToken: string | null } {
   const hash = window.location.hash;
   const match = hash.match(/^#\/doc\/([^?]+)(?:\?(.*))?$/);
   if (!match) return { docId: null, shareToken: null };
@@ -84,7 +84,7 @@ function parseHash(): { docId: string | null; shareToken: string | null } {
   return { docId, shareToken };
 }
 
-function createLoadingIndicator(message = 'Loading...'): HTMLElement {
+export function createLoadingIndicator(message = 'Loading...'): HTMLElement {
   const container = document.createElement('div');
   container.className = 'loading-container';
   const spinner = document.createElement('div');
