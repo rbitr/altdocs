@@ -853,7 +853,7 @@ describe('OT: edge cases', () => {
     }
   });
 
-  it('insert at delete range boundary — transforms produce valid operations', () => {
+  it('insert at delete range end boundary — converges correctly', () => {
     const doc = makeDoc([makeBlock('abcde')]);
 
     const opA: Operation = {
@@ -870,22 +870,33 @@ describe('OT: edge cases', () => {
     };
 
     // Insert at offset 3 (exactly at delete end boundary).
-    // Known edge case: the delete-against-insert expands to include the
-    // inserted text (shiftOnTie=true on end), but the insert is not turned
-    // into a no-op since it's NOT strictly within the range.
-    // This is a known non-convergence at the boundary — verify transforms are valid.
+    // The insert is outside the delete range, so it survives.
+    // The delete should NOT expand to cover the inserted text.
     const [aPrime, bPrime] = transformOperation(opA, opB);
 
+    // A' (insert transformed against delete): position shifts to 0
     expect(aPrime.type).toBe('insert_text');
     if (aPrime.type === 'insert_text') {
-      expect(aPrime.position.offset).toBe(0); // shifted to collapsed position
+      expect(aPrime.position.offset).toBe(0);
     }
+    // B' (delete transformed against insert): delete does NOT expand
     expect(bPrime.type).toBe('delete_text');
     if (bPrime.type === 'delete_text') {
       expect(bPrime.range.start.offset).toBe(0);
-      // End expands to include the inserted character
-      expect(bPrime.range.end.offset).toBe(4);
+      expect(bPrime.range.end.offset).toBe(3); // stays at 3, not 4
     }
+
+    // Verify convergence: both paths produce the same result
+    // Path A→B': apply insert first, then transformed delete
+    const afterA = applyOperation(doc, opA);       // "abcXde"
+    const afterAB = applyOperation(afterA, bPrime); // delete [0,3] → "Xde"
+
+    // Path B→A': apply delete first, then transformed insert
+    const afterB = applyOperation(doc, opB);        // "de"
+    const afterBA = applyOperation(afterB, aPrime);  // insert "X" at 0 → "Xde"
+
+    expect(blockToPlainText(afterAB.blocks[0])).toBe('Xde');
+    expect(blockToPlainText(afterBA.blocks[0])).toBe('Xde');
   });
 
   it('multi-block delete position transform — position in middle block', () => {

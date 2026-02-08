@@ -331,11 +331,14 @@ function transformDeleteAgainstInsert(
   const ins = other.position;
   const insLen = other.text.length;
 
-  // Both endpoints shift right when the insert is at or before them.
-  // When the insert is within the range, the end shifts to encompass
-  // the inserted text (matching the no-op insert on the other side).
+  // Start shifts right when the insert is at or before it (shiftOnTie=true).
+  // End shifts right only when the insert is strictly before it (shiftOnTie=false).
+  // Using shiftOnTie=false for the end prevents the delete from expanding
+  // to cover text inserted at the exact end boundary, which would break
+  // convergence (the insert survives via transformInsertText since it's
+  // not strictly within the range).
   const newStart = transformPositionAgainstInsert(start, ins, insLen, true);
-  const newEnd = transformPositionAgainstInsert(end, ins, insLen, true);
+  const newEnd = transformPositionAgainstInsert(end, ins, insLen, false);
   return { ...op, range: { start: newStart, end: newEnd } };
 }
 
