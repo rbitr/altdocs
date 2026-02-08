@@ -1,10 +1,9 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request } from 'express';
 import {
   getDocument, listDocuments, createDocument, updateDocument, deleteDocument,
   listVersions, getVersion,
   createShare, getShareByToken, listShares, deleteShare, getShare,
 } from './db.js';
-import type { ShareRecord } from './db.js';
 import { validateContent } from '../shared/validation.js';
 
 const router = Router();
@@ -227,7 +226,7 @@ router.post('/api/documents/:id/versions/:version/restore', (req, res) => {
 // ── Sharing routes ──────────────────────────────────────
 
 // Create a share link
-router.post('/api/documents/:id/shares', (req: Request, res: Response) => {
+router.post('/api/documents/:id/shares', (req, res) => {
   const doc = getDocument(req.params.id);
   if (!doc) {
     res.status(404).json({ error: 'Document not found' });
@@ -248,7 +247,7 @@ router.post('/api/documents/:id/shares', (req: Request, res: Response) => {
 });
 
 // List shares for a document
-router.get('/api/documents/:id/shares', (req: Request, res: Response) => {
+router.get('/api/documents/:id/shares', (req, res) => {
   const doc = getDocument(req.params.id);
   if (!doc) {
     res.status(404).json({ error: 'Document not found' });
@@ -264,7 +263,7 @@ router.get('/api/documents/:id/shares', (req: Request, res: Response) => {
 });
 
 // Delete a share link
-router.delete('/api/documents/:id/shares/:shareId', (req: Request, res: Response) => {
+router.delete('/api/documents/:id/shares/:shareId', (req, res) => {
   const doc = getDocument(req.params.id);
   if (!doc) {
     res.status(404).json({ error: 'Document not found' });
@@ -285,7 +284,7 @@ router.delete('/api/documents/:id/shares/:shareId', (req: Request, res: Response
 });
 
 // Access a document via share token
-router.get('/api/shared/:token', (req: Request, res: Response) => {
+router.get('/api/shared/:token', (req, res) => {
   const share = getShareByToken(req.params.token);
   if (!share) {
     res.status(404).json({ error: 'Share link not found or expired' });

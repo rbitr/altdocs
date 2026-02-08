@@ -17,6 +17,7 @@ test('toolbar has font family select', async ({ page }) => {
 test('font size select has preset size options', async ({ page }) => {
   await page.goto(docUrl);
   const select = page.locator('[data-toolbar-action="font-size"]');
+  await expect(select).toBeVisible();
   const options = select.locator('option');
   const values = await options.evaluateAll((opts: HTMLOptionElement[]) =>
     opts.map((o) => o.value)
@@ -31,6 +32,7 @@ test('font size select has preset size options', async ({ page }) => {
 test('font family select has web-safe font options', async ({ page }) => {
   await page.goto(docUrl);
   const select = page.locator('[data-toolbar-action="font-family"]');
+  await expect(select).toBeVisible();
   const options = select.locator('option');
   const values = await options.evaluateAll((opts: HTMLOptionElement[]) =>
     opts.map((o) => o.value)

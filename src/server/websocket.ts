@@ -329,13 +329,20 @@ export class CollaborationServer {
       (entry) => entry.version > msg.version
     );
 
-    for (const entry of opsToTransformAgainst) {
-      transformedOp = transformSingle(transformedOp, entry.op);
-    }
+    try {
+      for (const entry of opsToTransformAgainst) {
+        transformedOp = transformSingle(transformedOp, entry.op);
+      }
 
-    // Apply the transformed operation to the server's document state
-    if (room.document) {
-      room.document = applyOperation(room.document, transformedOp);
+      // Apply the transformed operation to the server's document state
+      if (room.document) {
+        room.document = applyOperation(room.document, transformedOp);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Operation failed';
+      console.error(`[WS] Operation transform/apply error in room ${msg.documentId}: ${message}`);
+      this.sendMessage(ws, { type: 'error', message: `Operation rejected: ${message}` });
+      return;
     }
 
     // Increment version
