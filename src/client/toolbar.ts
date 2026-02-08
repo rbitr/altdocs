@@ -116,6 +116,19 @@ export class Toolbar {
 
     this.addSeparator();
 
+    // Indent group
+    const indentGroup = this.createGroup();
+    this.addButton(indentGroup, 'indent', '\u2192', 'Indent (Tab)', () => {
+      this.editor.indent();
+      this.editor.focus();
+    });
+    this.addButton(indentGroup, 'outdent', '\u2190', 'Outdent (Shift+Tab)', () => {
+      this.editor.outdent();
+      this.editor.focus();
+    });
+
+    this.addSeparator();
+
     // Insert group
     const insertGroup = this.createGroup();
     this.addButton(insertGroup, 'horizontal-rule', '—', 'Horizontal Rule', () => {

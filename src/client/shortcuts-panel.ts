@@ -29,6 +29,8 @@ export const SHORTCUT_DATA: ShortcutCategory[] = [
       { keys: 'Ctrl+C', description: 'Copy' },
       { keys: 'Ctrl+X', description: 'Cut' },
       { keys: 'Ctrl+V', description: 'Paste' },
+      { keys: 'Tab', description: 'Indent block' },
+      { keys: 'Shift+Tab', description: 'Outdent block' },
     ],
   },
   {

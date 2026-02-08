@@ -1,5 +1,5 @@
 import type { Document, Block, TextRun, BlockType } from '../shared/model.js';
-import { blockTextLength } from '../shared/model.js';
+import { blockTextLength, getIndentLevel } from '../shared/model.js';
 
 /** Map from BlockType to the HTML tag used to render it */
 const BLOCK_TAG_MAP: Record<BlockType, string> = {
@@ -42,6 +42,10 @@ function renderBlock(block: Block): HTMLElement {
   if (block.type === 'horizontal-rule') {
     const el = document.createElement('hr');
     el.dataset.blockId = block.id;
+    const indent = getIndentLevel(block);
+    if (indent > 0) {
+      el.dataset.indent = String(indent);
+    }
     return el;
   }
 
@@ -52,6 +56,12 @@ function renderBlock(block: Block): HTMLElement {
 
   if (block.alignment !== 'left') {
     el.style.textAlign = block.alignment;
+  }
+
+  // For non-list blocks, apply indent as margin-left via data attribute
+  const indent = getIndentLevel(block);
+  if (indent > 0 && block.type !== 'bullet-list-item' && block.type !== 'numbered-list-item') {
+    el.dataset.indent = String(indent);
   }
 
   const isEmpty = blockTextLength(block) === 0;
@@ -98,6 +108,90 @@ function groupListItems(blocks: Block[]): Array<{ block: Block; element: HTMLEle
   return result;
 }
 
+/** Get the list tag for a block type */
+function listTagForType(type: 'bullet-list-item' | 'numbered-list-item'): string {
+  return type === 'bullet-list-item' ? 'ul' : 'ol';
+}
+
+/**
+ * Append a list item to a nested list structure.
+ *
+ * listStack: array of { element: HTMLElement (ul/ol), indent: number, type: string }
+ * representing the current nesting. listStack[0] is the outermost list.
+ *
+ * The function adjusts the stack to match the target indent level,
+ * creating or closing nested lists as needed.
+ */
+function appendListItem(
+  container: HTMLElement,
+  listStack: Array<{ element: HTMLElement; indent: number; type: string }>,
+  blockEl: HTMLElement,
+  blockType: 'bullet-list-item' | 'numbered-list-item',
+  indent: number
+): void {
+  const tag = listTagForType(blockType);
+
+  if (listStack.length === 0) {
+    // Start a new top-level list
+    const list = document.createElement(tag);
+    container.appendChild(list);
+    listStack.push({ element: list, indent: 0, type: tag });
+  }
+
+  // Pop levels deeper than our target
+  while (listStack.length > 1 && listStack[listStack.length - 1].indent > indent) {
+    listStack.pop();
+  }
+
+  const currentLevel = listStack[listStack.length - 1];
+
+  if (currentLevel.indent === indent && currentLevel.type === tag) {
+    // Same indent and same list type — just append
+    currentLevel.element.appendChild(blockEl);
+  } else if (currentLevel.indent === indent && currentLevel.type !== tag) {
+    // Same indent but different list type — pop and create new sibling list
+    if (listStack.length > 1) {
+      listStack.pop();
+      const parentList = listStack[listStack.length - 1];
+      const lastLi = parentList.element.lastElementChild as HTMLElement | null;
+      const newList = document.createElement(tag);
+      if (lastLi && lastLi.tagName === 'LI') {
+        lastLi.appendChild(newList);
+      } else {
+        parentList.element.appendChild(newList);
+      }
+      listStack.push({ element: newList, indent, type: tag });
+      newList.appendChild(blockEl);
+    } else {
+      // Top-level type switch — start a new root list
+      listStack.length = 0;
+      const list = document.createElement(tag);
+      container.appendChild(list);
+      listStack.push({ element: list, indent: 0, type: tag });
+      list.appendChild(blockEl);
+    }
+  } else if (currentLevel.indent < indent) {
+    // Need to go deeper — create sub-lists for each level
+    let parentEl = currentLevel.element;
+    for (let level = currentLevel.indent + 1; level <= indent; level++) {
+      const lastLi = parentEl.lastElementChild as HTMLElement | null;
+      const newList = document.createElement(tag);
+      if (lastLi && lastLi.tagName === 'LI') {
+        lastLi.appendChild(newList);
+      } else {
+        // No <li> to attach to — append to the list directly
+        parentEl.appendChild(newList);
+      }
+      listStack.push({ element: newList, indent: level, type: tag });
+      parentEl = newList;
+    }
+    parentEl.appendChild(blockEl);
+  } else {
+    // currentLevel.indent > indent but we already popped — shouldn't happen, but handle gracefully
+    currentLevel.element.appendChild(blockEl);
+  }
+}
+
 /**
  * Render an entire document model to a container element.
  * This does a full re-render (replaces all children).
@@ -105,26 +199,18 @@ function groupListItems(blocks: Block[]): Array<{ block: Block; element: HTMLEle
 export function renderDocument(doc: Document, container: HTMLElement): void {
   container.innerHTML = '';
 
-  let currentList: HTMLElement | null = null;
-  let currentListType: 'bullet-list-item' | 'numbered-list-item' | null = null;
+  // listStack tracks the nesting of list elements for proper sub-list rendering
+  let listStack: Array<{ element: HTMLElement; indent: number; type: string }> = [];
 
   for (const block of doc.blocks) {
     const blockEl = renderBlock(block);
 
     if (block.type === 'bullet-list-item' || block.type === 'numbered-list-item') {
-      // Need to wrap in a ul or ol
-      if (currentListType !== block.type) {
-        // Start a new list
-        const listTag = block.type === 'bullet-list-item' ? 'ul' : 'ol';
-        currentList = document.createElement(listTag);
-        container.appendChild(currentList);
-        currentListType = block.type;
-      }
-      currentList!.appendChild(blockEl);
+      const indent = getIndentLevel(block);
+      appendListItem(container, listStack, blockEl, block.type, indent);
     } else {
-      // Not a list item — reset list tracking
-      currentList = null;
-      currentListType = null;
+      // Not a list item — reset list stack
+      listStack = [];
       container.appendChild(blockEl);
     }
   }

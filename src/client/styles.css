@@ -260,6 +260,22 @@ body {
   margin-bottom: 0.25em;
 }
 
+/* Nested lists: remove extra margin on sub-lists */
+.altdocs-editor li > ul,
+.altdocs-editor li > ol {
+  margin-bottom: 0;
+}
+
+/* Block indentation via data-indent attribute (non-list blocks) */
+.altdocs-editor [data-indent="1"] { margin-left: 1.5em; }
+.altdocs-editor [data-indent="2"] { margin-left: 3em; }
+.altdocs-editor [data-indent="3"] { margin-left: 4.5em; }
+.altdocs-editor [data-indent="4"] { margin-left: 6em; }
+.altdocs-editor [data-indent="5"] { margin-left: 7.5em; }
+.altdocs-editor [data-indent="6"] { margin-left: 9em; }
+.altdocs-editor [data-indent="7"] { margin-left: 10.5em; }
+.altdocs-editor [data-indent="8"] { margin-left: 12em; }
+
 .altdocs-editor blockquote {
   border-left: 4px solid #ccc;
   padding-left: 1em;

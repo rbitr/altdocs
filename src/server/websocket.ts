@@ -234,7 +234,7 @@ export class CollaborationServer {
       try {
         blocks = JSON.parse(docRecord.content);
       } catch {
-        blocks = [{ id: 'block_1', type: 'paragraph', alignment: 'left', runs: [{ text: '', style: {} }] }];
+        blocks = [{ id: 'block_1', type: 'paragraph', alignment: 'left', indentLevel: 0, runs: [{ text: '', style: {} }] }];
       }
       room = {
         documentId,

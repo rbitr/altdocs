@@ -36,8 +36,11 @@ export interface Block {
   id: string;
   type: BlockType;
   alignment: Alignment;
+  indentLevel?: number;
   runs: TextRun[];
 }
+
+export const MAX_INDENT_LEVEL = 8;
 
 export interface Document {
   id: string;
@@ -116,6 +119,12 @@ export interface InsertBlockOp {
   blockType: BlockType;
 }
 
+export interface SetIndentOp {
+  type: 'set_indent';
+  blockIndex: number;
+  indentLevel: number;
+}
+
 export type Operation =
   | InsertTextOp
   | DeleteTextOp
@@ -125,11 +134,17 @@ export type Operation =
   | MergeBlockOp
   | ChangeBlockTypeOp
   | ChangeBlockAlignmentOp
-  | InsertBlockOp;
+  | InsertBlockOp
+  | SetIndentOp;
 
 // ============================================================
 // Helper Functions
 // ============================================================
+
+/** Get the indent level of a block (defaults to 0 for blocks without it) */
+export function getIndentLevel(block: Block): number {
+  return block.indentLevel ?? 0;
+}
 
 /** Get the total text length of a block (sum of all run text lengths) */
 export function blockTextLength(block: Block): number {
@@ -261,6 +276,7 @@ function cloneBlock(block: Block): Block {
     id: block.id,
     type: block.type,
     alignment: block.alignment,
+    indentLevel: block.indentLevel ?? 0,
     runs: block.runs.map((r) => ({ text: r.text, style: { ...r.style } })),
   };
 }
@@ -309,6 +325,8 @@ export function applyOperation(doc: Document, op: Operation): Document {
       return applyChangeBlockAlignment(result, op);
     case 'insert_block':
       return applyInsertBlock(result, op);
+    case 'set_indent':
+      return applySetIndent(result, op);
   }
 }
 
@@ -490,6 +508,7 @@ function applySplitBlock(doc: Document, op: SplitBlockOp): Document {
     id: generateBlockId(),
     type: 'paragraph',
     alignment: block.alignment,
+    indentLevel: block.indentLevel,
     runs: normalizeRuns(afterRuns),
   };
   if (newBlock.runs.length === 0) {
@@ -540,9 +559,17 @@ function applyInsertBlock(doc: Document, op: InsertBlockOp): Document {
     id: generateBlockId(),
     type: op.blockType,
     alignment: 'left',
+    indentLevel: 0,
     runs: [{ text: '', style: {} }],
   };
   doc.blocks.splice(insertAt, 0, newBlock);
+  return doc;
+}
+
+function applySetIndent(doc: Document, op: SetIndentOp): Document {
+  const block = doc.blocks[op.blockIndex];
+  if (!block) return doc;
+  block.indentLevel = Math.max(0, Math.min(op.indentLevel, MAX_INDENT_LEVEL));
   return doc;
 }
 
@@ -592,6 +619,7 @@ export function createEmptyDocument(id: string, title: string): Document {
         id: generateBlockId(),
         type: 'paragraph',
         alignment: 'left',
+        indentLevel: 0,
         runs: [{ text: '', style: {} }],
       },
     ],
@@ -608,6 +636,7 @@ export function createBlock(
     id: generateBlockId(),
     type,
     alignment,
+    indentLevel: 0,
     runs: [{ text, style }],
   };
 }

@@ -1,5 +1,5 @@
 import type { Document, Operation, Position, TextStyle, BlockType, Alignment } from '../shared/model.js';
-import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange, generateBlockId } from '../shared/model.js';
+import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange, generateBlockId, getIndentLevel, MAX_INDENT_LEVEL } from '../shared/model.js';
 import type { CursorState } from '../shared/cursor.js';
 import {
   collapsedCursor,
@@ -201,6 +201,17 @@ export class Editor {
       e.preventDefault();
       this.cursor = moveToDocEnd(this.doc, shift, this.cursor);
       this.updateCursor();
+      return;
+    }
+
+    // Tab / Shift+Tab for indent/outdent
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (shift) {
+        this.outdent();
+      } else {
+        this.indent();
+      }
       return;
     }
 
@@ -787,6 +798,48 @@ export class Editor {
     };
     this.applyLocal(op);
     this.render();
+  }
+
+  /** Indent the current block by one level */
+  indent(): void {
+    const blockIndex = this.cursor.focus.blockIndex;
+    const block = this.doc.blocks[blockIndex];
+    if (!block) return;
+    const current = getIndentLevel(block);
+    if (current >= MAX_INDENT_LEVEL) return;
+
+    this.pushHistory();
+    const op: Operation = {
+      type: 'set_indent',
+      blockIndex,
+      indentLevel: current + 1,
+    };
+    this.applyLocal(op);
+    this.render();
+  }
+
+  /** Outdent the current block by one level */
+  outdent(): void {
+    const blockIndex = this.cursor.focus.blockIndex;
+    const block = this.doc.blocks[blockIndex];
+    if (!block) return;
+    const current = getIndentLevel(block);
+    if (current <= 0) return;
+
+    this.pushHistory();
+    const op: Operation = {
+      type: 'set_indent',
+      blockIndex,
+      indentLevel: current - 1,
+    };
+    this.applyLocal(op);
+    this.render();
+  }
+
+  /** Get the indent level of the current block */
+  getActiveIndentLevel(): number {
+    const block = this.doc.blocks[this.cursor.focus.blockIndex];
+    return block ? getIndentLevel(block) : 0;
   }
 
   /** Get the current formatting state at cursor/selection for toolbar display */

@@ -56,6 +56,13 @@ function validateBlock(block: unknown, index: number): string | null {
     return `Block ${index}: 'alignment' must be one of: left, center, right`;
   }
 
+  // indentLevel is optional (defaults to 0) but must be a non-negative integer if present
+  if (b.indentLevel !== undefined) {
+    if (typeof b.indentLevel !== 'number' || !Number.isInteger(b.indentLevel) || b.indentLevel < 0 || b.indentLevel > 8) {
+      return `Block ${index}: 'indentLevel' must be an integer between 0 and 8`;
+    }
+  }
+
   if (!Array.isArray(b.runs)) {
     return `Block ${index}: 'runs' must be an array`;
   }
