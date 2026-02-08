@@ -280,3 +280,28 @@ export async function fetchSharedDocument(token: string): Promise<SharedDocument
   if (!res.ok) throw new Error(`Failed to load shared document: ${res.status}`);
   return res.json();
 }
+
+// ── Upload API ──────────────────────────────────────
+
+export interface UploadResponse {
+  url: string;
+}
+
+export async function uploadImage(file: File): Promise<UploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000); // 30s for uploads
+  const headers = authHeaders();
+  const res = await fetch('/api/uploads', {
+    method: 'POST',
+    headers,
+    body: formData,
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timer));
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(body.error || `Upload failed: ${res.status}`);
+  }
+  return res.json();
+}

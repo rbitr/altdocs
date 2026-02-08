@@ -1,5 +1,6 @@
 import type { Document, Operation, Position, TextStyle, BlockType, Alignment } from '../shared/model.js';
 import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange, generateBlockId, getIndentLevel, MAX_INDENT_LEVEL } from '../shared/model.js';
+import { uploadImage } from './api-client.js';
 import type { CursorState } from '../shared/cursor.js';
 import {
   collapsedCursor,
@@ -272,9 +273,9 @@ export class Editor {
     // This handles cases where beforeinput doesn't fire (e.g., headless browsers).
     if (!ctrl && !e.altKey && e.key.length === 1) {
       e.preventDefault();
-      // Block text input on horizontal rules
+      // Block text input on void blocks (horizontal rules, images)
       const block = this.doc.blocks[this.cursor.focus.blockIndex];
-      if (block && block.type === 'horizontal-rule') return;
+      if (block && (block.type === 'horizontal-rule' || block.type === 'image')) return;
       this.insertText(e.key);
       return;
     }
@@ -447,8 +448,8 @@ export class Editor {
     const pos = this.cursor.focus;
     const currentBlock = this.doc.blocks[pos.blockIndex];
 
-    // If current block is a horizontal rule, delete it and move cursor to previous block end
-    if (currentBlock && currentBlock.type === 'horizontal-rule') {
+    // If current block is a void block (horizontal rule or image), delete it
+    if (currentBlock && (currentBlock.type === 'horizontal-rule' || currentBlock.type === 'image')) {
       if (pos.blockIndex > 0) {
         const prevBlockLen = blockTextLength(this.doc.blocks[pos.blockIndex - 1]);
         this.doc.blocks.splice(pos.blockIndex, 1);
@@ -457,12 +458,13 @@ export class Editor {
           offset: prevBlockLen,
         });
       } else if (this.doc.blocks.length > 1) {
-        // HR is first block — remove it and move to next block start
+        // Void block is first — remove it and move to next block start
         this.doc.blocks.splice(0, 1);
         this.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
       } else {
         // Only block — convert to empty paragraph
         currentBlock.type = 'paragraph';
+        delete currentBlock.imageUrl;
         currentBlock.runs = [{ text: '', style: {} }];
         this.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
       }
@@ -487,8 +489,8 @@ export class Editor {
     } else if (pos.blockIndex > 0) {
       const prevBlock = this.doc.blocks[pos.blockIndex - 1];
 
-      // If previous block is a horizontal rule, delete the HR
-      if (prevBlock.type === 'horizontal-rule') {
+      // If previous block is a void block (HR or image), delete it
+      if (prevBlock.type === 'horizontal-rule' || prevBlock.type === 'image') {
         this.doc.blocks.splice(pos.blockIndex - 1, 1);
         this.cursor = collapsedCursor({
           blockIndex: pos.blockIndex - 1,
@@ -558,8 +560,8 @@ export class Editor {
 
     const currentBlock = this.doc.blocks[this.cursor.focus.blockIndex];
 
-    // Horizontal rules: Enter inserts a new paragraph after the rule
-    if (currentBlock && currentBlock.type === 'horizontal-rule') {
+    // Void blocks (HR, images): Enter inserts a new paragraph after
+    if (currentBlock && (currentBlock.type === 'horizontal-rule' || currentBlock.type === 'image')) {
       const op: Operation = {
         type: 'insert_block',
         afterBlockIndex: this.cursor.focus.blockIndex,
@@ -785,6 +787,75 @@ export class Editor {
     });
 
     this.render();
+  }
+
+  /** Insert an image by opening a file picker, uploading, and creating an image block */
+  insertImage(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      this.pushHistory();
+
+      // If there's a selection, delete it first
+      if (!isCollapsed(this.cursor)) {
+        this.deleteSelection();
+      }
+
+      const blockIndex = this.cursor.focus.blockIndex;
+
+      // Insert the image block after the current block
+      const insertOp: Operation = {
+        type: 'insert_block',
+        afterBlockIndex: blockIndex,
+        blockType: 'image',
+      };
+      this.applyLocal(insertOp);
+
+      const imageBlockIndex = blockIndex + 1;
+
+      // Insert a new paragraph after the image for continued editing
+      const paraOp: Operation = {
+        type: 'insert_block',
+        afterBlockIndex: imageBlockIndex,
+        blockType: 'paragraph',
+      };
+      this.applyLocal(paraOp);
+
+      // Move cursor to the new paragraph
+      this.cursor = collapsedCursor({
+        blockIndex: imageBlockIndex + 1,
+        offset: 0,
+      });
+
+      this.render();
+
+      // Upload the file and set the image URL
+      try {
+        const result = await uploadImage(file);
+        const setImageOp: Operation = {
+          type: 'set_image',
+          blockIndex: imageBlockIndex,
+          imageUrl: result.url,
+        };
+        this.applyLocal(setImageOp);
+        this.render();
+      } catch {
+        // Upload failed — remove the image block
+        if (this.doc.blocks[imageBlockIndex]?.type === 'image') {
+          this.doc.blocks.splice(imageBlockIndex, 1);
+          this.cursor = collapsedCursor({
+            blockIndex: Math.min(blockIndex, this.doc.blocks.length - 1),
+            offset: 0,
+          });
+          this.render();
+        }
+      }
+    };
+    input.click();
   }
 
   /** Change the alignment of the block at the cursor */

@@ -28,6 +28,7 @@ import type {
   ChangeBlockAlignmentOp,
   InsertBlockOp,
   SetIndentOp,
+  SetImageOp,
 } from './model.js';
 
 // ============================================================
@@ -231,6 +232,8 @@ function transformWithPriority(
       return transformInsertBlockOp(op, other, hasPriority);
     case 'set_indent':
       return transformSetIndent(op, other);
+    case 'set_image':
+      return transformSetImage(op, other);
   }
 }
 
@@ -665,6 +668,15 @@ function transformBlockIndex(blockIndex: number, other: Operation): number {
 // ============================================================
 
 function transformSetIndent(op: SetIndentOp, other: Operation): SetIndentOp {
+  const newIndex = transformBlockIndex(op.blockIndex, other);
+  return { ...op, blockIndex: newIndex };
+}
+
+// ============================================================
+// Transform set_image against other operations
+// ============================================================
+
+function transformSetImage(op: SetImageOp, other: Operation): SetImageOp {
   const newIndex = transformBlockIndex(op.blockIndex, other);
   return { ...op, blockIndex: newIndex };
 }

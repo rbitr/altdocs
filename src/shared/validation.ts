@@ -3,7 +3,7 @@ import type { BlockType, Alignment } from './model.js';
 const VALID_BLOCK_TYPES: Set<string> = new Set<string>([
   'paragraph', 'heading1', 'heading2', 'heading3',
   'bullet-list-item', 'numbered-list-item',
-  'blockquote', 'code-block', 'horizontal-rule',
+  'blockquote', 'code-block', 'horizontal-rule', 'image',
 ]);
 
 const VALID_ALIGNMENTS: Set<string> = new Set<string>(['left', 'center', 'right']);
@@ -60,6 +60,13 @@ function validateBlock(block: unknown, index: number): string | null {
   if (b.indentLevel !== undefined) {
     if (typeof b.indentLevel !== 'number' || !Number.isInteger(b.indentLevel) || b.indentLevel < 0 || b.indentLevel > 8) {
       return `Block ${index}: 'indentLevel' must be an integer between 0 and 8`;
+    }
+  }
+
+  // imageUrl is optional but must be a string if present
+  if (b.imageUrl !== undefined) {
+    if (typeof b.imageUrl !== 'string') {
+      return `Block ${index}: 'imageUrl' must be a string`;
     }
   }
 

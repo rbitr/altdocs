@@ -135,6 +135,9 @@ export class Toolbar {
       this.editor.insertHorizontalRule();
       this.editor.focus();
     });
+    this.addButton(insertGroup, 'insert-image', '\ud83d\uddbc', 'Insert Image', () => {
+      this.editor.insertImage();
+    });
 
     this.addSeparator();
 

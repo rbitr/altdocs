@@ -12,6 +12,7 @@ const BLOCK_TAG_MAP: Record<BlockType, string> = {
   'blockquote': 'blockquote',
   'code-block': 'pre',
   'horizontal-rule': 'hr',
+  'image': 'figure',
 };
 
 /** Render a single text run to a DOM element */
@@ -45,6 +46,30 @@ function renderBlock(block: Block): HTMLElement {
     const indent = getIndentLevel(block);
     if (indent > 0) {
       el.dataset.indent = String(indent);
+    }
+    return el;
+  }
+
+  // Image blocks render as <figure> with <img>
+  if (block.type === 'image') {
+    const el = document.createElement('figure');
+    el.dataset.blockId = block.id;
+    el.className = 'image-block';
+    const indent = getIndentLevel(block);
+    if (indent > 0) {
+      el.dataset.indent = String(indent);
+    }
+    if (block.imageUrl) {
+      const img = document.createElement('img');
+      img.src = block.imageUrl;
+      img.alt = 'Document image';
+      el.appendChild(img);
+    } else {
+      // No image URL yet — show placeholder
+      const placeholder = document.createElement('div');
+      placeholder.className = 'image-placeholder';
+      placeholder.textContent = 'Image loading...';
+      el.appendChild(placeholder);
     }
     return el;
   }

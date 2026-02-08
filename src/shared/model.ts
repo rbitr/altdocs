@@ -11,7 +11,8 @@ export type BlockType =
   | 'numbered-list-item'
   | 'blockquote'
   | 'code-block'
-  | 'horizontal-rule';
+  | 'horizontal-rule'
+  | 'image';
 
 export type Alignment = 'left' | 'center' | 'right';
 
@@ -37,6 +38,7 @@ export interface Block {
   type: BlockType;
   alignment: Alignment;
   indentLevel?: number;
+  imageUrl?: string;
   runs: TextRun[];
 }
 
@@ -125,6 +127,12 @@ export interface SetIndentOp {
   indentLevel: number;
 }
 
+export interface SetImageOp {
+  type: 'set_image';
+  blockIndex: number;
+  imageUrl: string;
+}
+
 export type Operation =
   | InsertTextOp
   | DeleteTextOp
@@ -135,7 +143,8 @@ export type Operation =
   | ChangeBlockTypeOp
   | ChangeBlockAlignmentOp
   | InsertBlockOp
-  | SetIndentOp;
+  | SetIndentOp
+  | SetImageOp;
 
 // ============================================================
 // Helper Functions
@@ -272,13 +281,17 @@ function styleAtOffset(runs: TextRun[], offset: number): TextStyle {
 // ============================================================
 
 function cloneBlock(block: Block): Block {
-  return {
+  const clone: Block = {
     id: block.id,
     type: block.type,
     alignment: block.alignment,
     indentLevel: block.indentLevel ?? 0,
     runs: block.runs.map((r) => ({ text: r.text, style: { ...r.style } })),
   };
+  if (block.imageUrl !== undefined) {
+    clone.imageUrl = block.imageUrl;
+  }
+  return clone;
 }
 
 function cloneDoc(doc: Document): Document {
@@ -327,6 +340,8 @@ export function applyOperation(doc: Document, op: Operation): Document {
       return applyInsertBlock(result, op);
     case 'set_indent':
       return applySetIndent(result, op);
+    case 'set_image':
+      return applySetImage(result, op);
   }
 }
 
@@ -570,6 +585,13 @@ function applySetIndent(doc: Document, op: SetIndentOp): Document {
   const block = doc.blocks[op.blockIndex];
   if (!block) return doc;
   block.indentLevel = Math.max(0, Math.min(op.indentLevel, MAX_INDENT_LEVEL));
+  return doc;
+}
+
+function applySetImage(doc: Document, op: SetImageOp): Document {
+  const block = doc.blocks[op.blockIndex];
+  if (!block) return doc;
+  block.imageUrl = op.imageUrl;
   return doc;
 }
 
