@@ -241,9 +241,9 @@ function transformWithPriority(
     case 'merge_block':
       return transformMergeBlock(op, other);
     case 'change_block_type':
-      return transformChangeBlockType(op, other);
+      return transformChangeBlockType(op, other, hasPriority);
     case 'change_block_alignment':
-      return transformChangeBlockAlignment(op, other);
+      return transformChangeBlockAlignment(op, other, hasPriority);
     case 'insert_block':
       return transformInsertBlockOp(op, other, hasPriority);
     case 'set_indent':
@@ -645,8 +645,13 @@ function transformMergeBlock(op: MergeBlockOp, other: Operation): Operation {
 
 function transformChangeBlockType(
   op: ChangeBlockTypeOp,
-  other: Operation
+  other: Operation,
+  hasPriority: boolean
 ): ChangeBlockTypeOp {
+  // Concurrent change_block_type on same block: priority op wins
+  if (other.type === 'change_block_type' && other.blockIndex === op.blockIndex && !hasPriority) {
+    return { ...op, newType: other.newType };
+  }
   const newIndex = transformBlockIndex(op.blockIndex, other);
   return { ...op, blockIndex: newIndex };
 }
@@ -657,8 +662,13 @@ function transformChangeBlockType(
 
 function transformChangeBlockAlignment(
   op: ChangeBlockAlignmentOp,
-  other: Operation
+  other: Operation,
+  hasPriority: boolean
 ): ChangeBlockAlignmentOp {
+  // Concurrent change_block_alignment on same block: priority op wins
+  if (other.type === 'change_block_alignment' && other.blockIndex === op.blockIndex && !hasPriority) {
+    return { ...op, newAlignment: other.newAlignment };
+  }
   const newIndex = transformBlockIndex(op.blockIndex, other);
   return { ...op, blockIndex: newIndex };
 }

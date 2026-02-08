@@ -1907,7 +1907,7 @@ describe('OT: change_block_type vs various', () => {
     }
   });
 
-  it('change_block_type vs change_block_type — no change', () => {
+  it('change_block_type vs change_block_type — priority op adopts other value via transformSingle', () => {
     const opA: Operation = {
       type: 'change_block_type',
       blockIndex: 0,
@@ -1919,12 +1919,12 @@ describe('OT: change_block_type vs various', () => {
       newType: 'heading2',
     };
 
-    // Both change same block's type — last writer wins in model
+    // transformSingle gives priority to other (opB) — opA adopts opB's value
     const aPrime = transformSingle(opA, opB);
     expect(aPrime.type).toBe('change_block_type');
     if (aPrime.type === 'change_block_type') {
       expect(aPrime.blockIndex).toBe(0);
-      expect(aPrime.newType).toBe('heading1');
+      expect(aPrime.newType).toBe('heading2');
     }
   });
 
@@ -2105,7 +2105,7 @@ describe('OT: change_block_alignment vs various', () => {
     }
   });
 
-  it('change_block_alignment vs change_block_alignment — no change', () => {
+  it('change_block_alignment vs change_block_alignment — priority op adopts other value via transformSingle', () => {
     const opA: Operation = {
       type: 'change_block_alignment',
       blockIndex: 0,
@@ -2117,11 +2117,12 @@ describe('OT: change_block_alignment vs various', () => {
       newAlignment: 'right',
     };
 
+    // transformSingle gives priority to other (opB) — opA adopts opB's value
     const aPrime = transformSingle(opA, opB);
     expect(aPrime.type).toBe('change_block_alignment');
     if (aPrime.type === 'change_block_alignment') {
       expect(aPrime.blockIndex).toBe(0);
-      expect(aPrime.newAlignment).toBe('center');
+      expect(aPrime.newAlignment).toBe('right');
     }
   });
 });
@@ -3530,6 +3531,64 @@ describe('OT: set_line_spacing cross-combinations', () => {
       expect(docAB.blocks[0].type).toBe('heading2');
       expect(docBA.blocks[0].lineSpacing).toBe(1.5);
       expect(docBA.blocks[0].type).toBe('heading2');
+    });
+  });
+
+  // ============================================================
+  // change_block_type convergence
+  // ============================================================
+
+  describe('change_block_type vs change_block_type convergence', () => {
+    it('concurrent type change on same block: priority op (a) wins', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'change_block_type', blockIndex: 0, newType: 'heading1' };
+      const opB: Operation = { type: 'change_block_type', blockIndex: 0, newType: 'heading2' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      // Priority op (a) wins — both paths converge to a's value
+      expect(docAB.blocks[0].type).toBe('heading1');
+      expect(docBA.blocks[0].type).toBe('heading1');
+    });
+
+    it('concurrent type change on different blocks: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'change_block_type', blockIndex: 0, newType: 'heading1' };
+      const opB: Operation = { type: 'change_block_type', blockIndex: 1, newType: 'blockquote' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].type).toBe('heading1');
+      expect(docAB.blocks[1].type).toBe('blockquote');
+      expect(docBA.blocks[0].type).toBe('heading1');
+      expect(docBA.blocks[1].type).toBe('blockquote');
+    });
+  });
+
+  // ============================================================
+  // change_block_alignment convergence
+  // ============================================================
+
+  describe('change_block_alignment vs change_block_alignment convergence', () => {
+    it('concurrent alignment change on same block: priority op (a) wins', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'change_block_alignment', blockIndex: 0, newAlignment: 'center' };
+      const opB: Operation = { type: 'change_block_alignment', blockIndex: 0, newAlignment: 'right' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      // Priority op (a) wins — both paths converge to a's value
+      expect(docAB.blocks[0].alignment).toBe('center');
+      expect(docBA.blocks[0].alignment).toBe('center');
+    });
+
+    it('concurrent alignment change on different blocks: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'change_block_alignment', blockIndex: 0, newAlignment: 'center' };
+      const opB: Operation = { type: 'change_block_alignment', blockIndex: 1, newAlignment: 'right' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].alignment).toBe('center');
+      expect(docAB.blocks[1].alignment).toBe('right');
+      expect(docBA.blocks[0].alignment).toBe('center');
+      expect(docBA.blocks[1].alignment).toBe('right');
     });
   });
 });
