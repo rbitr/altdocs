@@ -2,20 +2,26 @@ import { Editor } from './editor.js';
 import { Toolbar } from './toolbar.js';
 import { createEmptyDocument } from '../shared/model.js';
 import type { Document } from '../shared/model.js';
-import { fetchDocumentList, fetchDocument, saveDocument, deleteDocumentById, duplicateDocument, ensureSession, updateMe } from './api-client.js';
+import {
+  fetchDocumentList, fetchDocument, saveDocument, deleteDocumentById, duplicateDocument,
+  ensureSession, updateMe, setShareToken, clearShareToken, getShareToken, fetchSharedDocument,
+} from './api-client.js';
 import type { UserInfo } from './api-client.js';
 import { toast } from './toast.js';
 import { CollaborationClient } from './collaboration.js';
 import { RemoteCursorRenderer } from './remote-cursors.js';
+import { SharePanel } from './share-panel.js';
 import type { Block } from '../shared/model.js';
 
 let editor: Editor | null = null;
 let toolbar: Toolbar | null = null;
 let collab: CollaborationClient | null = null;
 let remoteCursors: RemoteCursorRenderer | null = null;
+let sharePanel: SharePanel | null = null;
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSavedJSON = '';
 let currentUser: UserInfo | null = null;
+let currentDocPermission: string | null = null;
 
 const AUTO_SAVE_DELAY = 2000; // 2 seconds after last change
 
@@ -64,10 +70,18 @@ function updateSaveStatus(text: string): void {
   }
 }
 
-function getDocIdFromHash(): string | null {
+/** Parse doc ID and share token from hash: #/doc/{id}?share={token} */
+function parseHash(): { docId: string | null; shareToken: string | null } {
   const hash = window.location.hash;
-  const match = hash.match(/^#\/doc\/(.+)$/);
-  return match ? decodeURIComponent(match[1]) : null;
+  const match = hash.match(/^#\/doc\/([^?]+)(?:\?(.*))?$/);
+  if (!match) return { docId: null, shareToken: null };
+  const docId = decodeURIComponent(match[1]);
+  let shareToken: string | null = null;
+  if (match[2]) {
+    const params = new URLSearchParams(match[2]);
+    shareToken = params.get('share');
+  }
+  return { docId, shareToken };
 }
 
 function createLoadingIndicator(message = 'Loading...'): HTMLElement {
@@ -310,23 +324,56 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   const loading = createLoadingIndicator('Loading document...');
   container.appendChild(loading);
 
-  // Load or create document
+  // Resolve share token if present
+  const shareToken = getShareToken();
   let doc: Document;
-  try {
-    const record = await fetchDocument(docId);
-    const blocks = JSON.parse(record.content);
-    doc = { id: record.id, title: record.title, blocks };
-    // If blocks are empty, create a default block
-    if (doc.blocks.length === 0) {
-      doc = createEmptyDocument(docId, record.title);
+  let permission: string = 'owner';
+
+  // If opening via share token, resolve access first
+  if (shareToken) {
+    try {
+      const shared = await fetchSharedDocument(shareToken);
+      const blocks = JSON.parse(shared.document.content);
+      doc = { id: shared.document.id, title: shared.document.title, blocks };
+      permission = shared.permission;
+      if (doc.blocks.length === 0) {
+        doc = createEmptyDocument(docId, shared.document.title);
+      }
+    } catch {
+      loading.remove();
+      const err = document.createElement('p');
+      err.className = 'doc-list-empty';
+      err.textContent = 'This share link is invalid or has been revoked.';
+      container.appendChild(err);
+      return;
     }
-  } catch {
-    // Document doesn't exist yet — create a new one
-    doc = createEmptyDocument(docId, 'Untitled');
+  } else {
+    // Load or create document normally
+    try {
+      const record = await fetchDocument(docId);
+      const blocks = JSON.parse(record.content);
+      doc = { id: record.id, title: record.title, blocks };
+      permission = record.permission || 'owner';
+      if (doc.blocks.length === 0) {
+        doc = createEmptyDocument(docId, record.title);
+      }
+    } catch {
+      doc = createEmptyDocument(docId, 'Untitled');
+    }
   }
+
+  currentDocPermission = permission;
 
   // Remove loading indicator and render editor UI
   loading.remove();
+
+  // Read-only banner for view-only users
+  if (permission === 'view') {
+    const banner = document.createElement('div');
+    banner.className = 'readonly-banner';
+    banner.textContent = 'View only \u2014 you cannot edit this document';
+    container.appendChild(banner);
+  }
 
   // Title input
   const titleInput = document.createElement('input');
@@ -334,6 +381,9 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   titleInput.className = 'doc-title-input';
   titleInput.placeholder = 'Untitled';
   titleInput.id = 'doc-title';
+  if (permission === 'view') {
+    titleInput.readOnly = true;
+  }
   container.appendChild(titleInput);
 
   // Toolbar
@@ -343,6 +393,9 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   // Editor
   const editorEl = document.createElement('div');
   editorEl.className = 'altdocs-editor';
+  if (permission === 'view') {
+    editorEl.setAttribute('contenteditable', 'false');
+  }
   container.appendChild(editorEl);
 
   // Set title
@@ -350,22 +403,24 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
 
   // Title change handler — save title on change
   let titleSaveTimer: ReturnType<typeof setTimeout> | null = null;
-  titleInput.addEventListener('input', () => {
-    if (!editor) return;
-    const newTitle = titleInput.value.trim() || 'Untitled';
-    editor.doc = { ...editor.doc, title: newTitle };
-    // Debounce title save
-    if (titleSaveTimer) clearTimeout(titleSaveTimer);
-    titleSaveTimer = setTimeout(async () => {
-      updateSaveStatus('Saving...');
-      try {
-        await saveDocument(editor!.getDocument());
-        updateSaveStatus('Saved');
-      } catch {
-        updateSaveStatus('Save failed');
-      }
-    }, 500);
-  });
+  if (permission !== 'view') {
+    titleInput.addEventListener('input', () => {
+      if (!editor) return;
+      const newTitle = titleInput.value.trim() || 'Untitled';
+      editor.doc = { ...editor.doc, title: newTitle };
+      // Debounce title save
+      if (titleSaveTimer) clearTimeout(titleSaveTimer);
+      titleSaveTimer = setTimeout(async () => {
+        updateSaveStatus('Saving...');
+        try {
+          await saveDocument(editor!.getDocument());
+          updateSaveStatus('Saved');
+        } catch {
+          updateSaveStatus('Save failed');
+        }
+      }, 500);
+    });
+  }
 
   editor = new Editor(editorEl, doc);
   toolbar = new Toolbar(toolbarEl, editor);
@@ -388,20 +443,24 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   });
   lastSavedJSON = JSON.stringify(doc.blocks);
 
-  // Auto-save on editor changes + refresh remote cursors
+  // Auto-save on editor changes + refresh remote cursors (only if can write)
   editor.onUpdate(() => {
-    scheduleAutoSave();
+    if (permission !== 'view') {
+      scheduleAutoSave();
+    }
     if (remoteCursors && editor) {
       remoteCursors.refresh(editor.getDocument());
     }
   });
 
-  // Initial save to create on server if new
-  try {
-    await saveDocument(doc);
-    lastSavedJSON = JSON.stringify(doc.blocks);
-  } catch {
-    // Server may not be running in dev/test mode — that's OK
+  // Initial save to create on server if new (only if owner)
+  if (!shareToken) {
+    try {
+      await saveDocument(doc);
+      lastSavedJSON = JSON.stringify(doc.blocks);
+    } catch {
+      // Server may not be running in dev/test mode — that's OK
+    }
   }
 
   // Start real-time collaboration
@@ -434,6 +493,36 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   collabList.className = 'collab-users';
   statusBar.appendChild(collabList);
 
+  // Share button (only show for owners)
+  if (permission === 'owner') {
+    const shareBtn = document.createElement('button');
+    shareBtn.className = 'share-btn';
+    shareBtn.textContent = 'Share';
+    shareBtn.title = 'Share this document';
+    shareBtn.addEventListener('click', () => {
+      if (sharePanel && sharePanel.visible) {
+        sharePanel.close();
+      } else {
+        sharePanel = new SharePanel(docId);
+        sharePanel.open();
+      }
+    });
+    statusBar.appendChild(shareBtn);
+  }
+
+  // Permission badge in status bar
+  if (permission === 'view' || permission === 'edit') {
+    const permBadge = document.createElement('span');
+    permBadge.className = `permission-badge permission-${permission}`;
+    permBadge.textContent = permission === 'edit' ? 'Can edit' : 'View only';
+    statusBar.appendChild(permBadge);
+  }
+
+  // Make editor read-only for view-only users
+  if (permission === 'view') {
+    editorEl.setAttribute('contenteditable', 'false');
+  }
+
   // Expose for debugging
   (window as any).__editor = editor;
   (window as any).__toolbar = toolbar;
@@ -450,6 +539,10 @@ async function route(): Promise<void> {
     autoSaveTimer = null;
   }
   // Disconnect collaboration and flush pending save before navigating away
+  if (sharePanel) {
+    sharePanel.close();
+    sharePanel = null;
+  }
   if (remoteCursors) {
     remoteCursors.destroy();
     remoteCursors = null;
@@ -463,11 +556,19 @@ async function route(): Promise<void> {
     editor = null;
     toolbar = null;
   }
+  currentDocPermission = null;
 
-  const docId = getDocIdFromHash();
+  const { docId, shareToken } = parseHash();
+  if (shareToken) {
+    setShareToken(shareToken);
+  } else {
+    clearShareToken();
+  }
+
   if (docId) {
     await openEditor(app, docId);
   } else {
+    clearShareToken();
     await renderDocumentList(app);
   }
 }

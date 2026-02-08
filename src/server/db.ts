@@ -11,6 +11,7 @@ export interface DocumentRecord {
   id: string;
   title: string;
   content: string; // JSON-serialized Document.blocks
+  owner_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -18,7 +19,17 @@ export interface DocumentRecord {
 export interface DocumentListItem {
   id: string;
   title: string;
+  owner_id: string | null;
   updated_at: string;
+}
+
+export interface ShareRecord {
+  id: string;
+  document_id: string;
+  token: string;
+  permission: 'view' | 'edit';
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface VersionRecord {
@@ -111,8 +122,26 @@ function initDb(): Database.Database {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
+      owner_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    )
+  `);
+  // Migrate existing documents table to add owner_id if missing
+  try {
+    database.exec('ALTER TABLE documents ADD COLUMN owner_id TEXT');
+  } catch {
+    // Column already exists — ignore
+  }
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS document_shares (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      permission TEXT NOT NULL DEFAULT 'view',
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
     )
   `);
   database.exec(`
@@ -151,19 +180,30 @@ function initDb(): Database.Database {
 db = initDb();
 
 export function getDocument(id: string): DocumentRecord | undefined {
-  const row = db.prepare('SELECT id, title, content, created_at, updated_at FROM documents WHERE id = ?').get(id) as DocumentRecord | undefined;
+  const row = db.prepare('SELECT id, title, content, owner_id, created_at, updated_at FROM documents WHERE id = ?').get(id) as DocumentRecord | undefined;
   return row;
 }
 
 export function listDocuments(): DocumentListItem[] {
-  const rows = db.prepare('SELECT id, title, updated_at FROM documents ORDER BY updated_at DESC').all() as DocumentListItem[];
+  const rows = db.prepare('SELECT id, title, owner_id, updated_at FROM documents ORDER BY updated_at DESC').all() as DocumentListItem[];
   return rows;
 }
 
-export function createDocument(id: string, title: string, content: string): DocumentRecord {
+export function listDocumentsForUser(userId: string): DocumentListItem[] {
+  const rows = db.prepare(`
+    SELECT DISTINCT d.id, d.title, d.owner_id, d.updated_at FROM documents d
+    LEFT JOIN document_shares ds ON d.id = ds.document_id
+    WHERE d.owner_id IS NULL OR d.owner_id = ? OR ds.token IS NOT NULL
+    ORDER BY d.updated_at DESC
+  `).all(userId) as DocumentListItem[];
+  return rows;
+}
+
+export function createDocument(id: string, title: string, content: string, ownerId?: string): DocumentRecord {
   const now = new Date().toISOString();
-  db.prepare('INSERT INTO documents (id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, title, content, now, now);
-  return { id, title, content, created_at: now, updated_at: now };
+  const owner = ownerId || null;
+  db.prepare('INSERT INTO documents (id, title, content, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, title, content, owner, now, now);
+  return { id, title, content, owner_id: owner, created_at: now, updated_at: now };
 }
 
 const MAX_VERSIONS_PER_DOC = 50;
@@ -173,7 +213,7 @@ export function updateDocument(
   title: string,
   content: string
 ): DocumentRecord | undefined {
-  const existing = db.prepare('SELECT created_at, title, content FROM documents WHERE id = ?').get(id) as { created_at: string; title: string; content: string } | undefined;
+  const existing = db.prepare('SELECT created_at, owner_id, title, content FROM documents WHERE id = ?').get(id) as { created_at: string; owner_id: string | null; title: string; content: string } | undefined;
   if (!existing) return undefined;
   const now = new Date().toISOString();
   db.prepare('UPDATE documents SET title = ?, content = ?, updated_at = ? WHERE id = ?').run(title, content, now, id);
@@ -181,7 +221,7 @@ export function updateDocument(
   if (title !== existing.title || content !== existing.content) {
     createVersion(id, title, content);
   }
-  return { id, title, content, created_at: existing.created_at, updated_at: now };
+  return { id, title, content, owner_id: existing.owner_id, created_at: existing.created_at, updated_at: now };
 }
 
 export function createVersion(documentId: string, title: string, content: string): VersionRecord {
@@ -235,8 +275,57 @@ export function deleteVersions(documentId: string): void {
 
 export function deleteDocument(id: string): boolean {
   deleteVersions(id);
+  deleteSharesByDocument(id);
   const result = db.prepare('DELETE FROM documents WHERE id = ?').run(id);
   return result.changes > 0;
+}
+
+// ── Document sharing operations ──────────────────────────────
+
+function generateShareId(): string {
+  return `share_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function generateShareToken(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+export function createShare(documentId: string, permission: 'view' | 'edit', createdBy?: string): ShareRecord {
+  const now = new Date().toISOString();
+  const id = generateShareId();
+  const token = generateShareToken();
+  const creator = createdBy || null;
+  db.prepare(
+    'INSERT INTO document_shares (id, document_id, token, permission, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(id, documentId, token, permission, creator, now);
+  return { id, document_id: documentId, token, permission, created_by: creator, created_at: now };
+}
+
+export function getShareByToken(token: string): ShareRecord | undefined {
+  return db.prepare(
+    'SELECT id, document_id, token, permission, created_by, created_at FROM document_shares WHERE token = ?'
+  ).get(token) as ShareRecord | undefined;
+}
+
+export function getShare(id: string): ShareRecord | undefined {
+  return db.prepare(
+    'SELECT id, document_id, token, permission, created_by, created_at FROM document_shares WHERE id = ?'
+  ).get(id) as ShareRecord | undefined;
+}
+
+export function listShares(documentId: string): ShareRecord[] {
+  return db.prepare(
+    'SELECT id, document_id, token, permission, created_by, created_at FROM document_shares WHERE document_id = ? ORDER BY created_at DESC'
+  ).all(documentId) as ShareRecord[];
+}
+
+export function deleteShare(id: string): boolean {
+  const result = db.prepare('DELETE FROM document_shares WHERE id = ?').run(id);
+  return result.changes > 0;
+}
+
+export function deleteSharesByDocument(documentId: string): void {
+  db.prepare('DELETE FROM document_shares WHERE document_id = ?').run(documentId);
 }
 
 // ── User & Session operations ──────────────────────────────
@@ -295,6 +384,7 @@ export function deleteExpiredSessions(): number {
 /** Reset store — for testing only. Deletes all rows. */
 export function resetStore(): void {
   db.prepare('DELETE FROM sessions').run();
+  db.prepare('DELETE FROM document_shares').run();
   db.prepare('DELETE FROM document_versions').run();
   db.prepare('DELETE FROM documents').run();
   db.prepare('DELETE FROM users').run();
@@ -308,8 +398,20 @@ export function useMemoryDb(): void {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
+      owner_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS document_shares (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      permission TEXT NOT NULL DEFAULT 'view',
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
     )
   `);
   db.exec(`

@@ -11,7 +11,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
 import type { Server } from 'http';
 import { URL } from 'url';
-import { getSessionWithUser, getDocument } from './db.js';
+import { getSessionWithUser, getDocument, getShareByToken } from './db.js';
 import { transformSingle } from '../shared/ot.js';
 import type { Operation } from '../shared/model.js';
 import { applyOperation } from '../shared/model.js';
@@ -55,7 +55,7 @@ export class CollaborationServer {
   private wss: WebSocketServer;
   private rooms: Map<string, DocumentRoom> = new Map();
   /** Map from WebSocket to client metadata */
-  private wsClients: Map<WebSocket, { userId: string; displayName: string; color: string; documentId: string | null }> = new Map();
+  private wsClients: Map<WebSocket, { userId: string; displayName: string; color: string; documentId: string | null; shareToken: string | null; readOnly: boolean }> = new Map();
 
   constructor(server: Server) {
     this.wss = new WebSocketServer({ server });
@@ -104,12 +104,23 @@ export class CollaborationServer {
       return;
     }
 
+    // Extract optional share token
+    let shareToken: string | null = null;
+    try {
+      const url = new URL(urlStr, baseUrl);
+      shareToken = url.searchParams.get('share');
+    } catch {
+      // Already handled above
+    }
+
     // Store client info
     this.wsClients.set(ws, {
       userId: session.user_id,
       displayName: session.display_name,
       color: session.color,
       documentId: null,
+      shareToken,
+      readOnly: false,
     });
 
     ws.on('message', (data) => {
@@ -145,7 +156,7 @@ export class CollaborationServer {
 
   private handleJoin(
     ws: WebSocket,
-    clientMeta: { userId: string; displayName: string; color: string; documentId: string | null },
+    clientMeta: { userId: string; displayName: string; color: string; documentId: string | null; shareToken: string | null; readOnly: boolean },
     documentId: string
   ): void {
     // Leave previous room if any
@@ -158,6 +169,23 @@ export class CollaborationServer {
     if (!docRecord) {
       this.sendMessage(ws, { type: 'error', message: 'Document not found' });
       return;
+    }
+
+    // Check access permissions
+    if (docRecord.owner_id) {
+      if (clientMeta.userId === docRecord.owner_id) {
+        clientMeta.readOnly = false;
+      } else if (clientMeta.shareToken) {
+        const share = getShareByToken(clientMeta.shareToken);
+        if (!share || share.document_id !== documentId) {
+          this.sendMessage(ws, { type: 'error', message: 'Access denied' });
+          return;
+        }
+        clientMeta.readOnly = share.permission === 'view';
+      } else {
+        this.sendMessage(ws, { type: 'error', message: 'Access denied' });
+        return;
+      }
     }
 
     // Get or create room
@@ -228,9 +256,14 @@ export class CollaborationServer {
 
   private handleOperation(
     ws: WebSocket,
-    clientMeta: { userId: string; displayName: string; color: string; documentId: string | null },
+    clientMeta: { userId: string; displayName: string; color: string; documentId: string | null; shareToken: string | null; readOnly: boolean },
     msg: { type: 'operation'; documentId: string; clientId: string; version: number; operation: Operation }
   ): void {
+    if (clientMeta.readOnly) {
+      this.sendMessage(ws, { type: 'error', message: 'Read-only access' });
+      return;
+    }
+
     const room = this.rooms.get(msg.documentId);
     if (!room) {
       this.sendMessage(ws, { type: 'error', message: 'Not in a document room' });
@@ -301,7 +334,7 @@ export class CollaborationServer {
 
   private handleCursor(
     ws: WebSocket,
-    clientMeta: { userId: string; displayName: string; color: string; documentId: string | null },
+    clientMeta: { userId: string; displayName: string; color: string; documentId: string | null; shareToken: string | null; readOnly: boolean },
     msg: { type: 'cursor'; documentId: string; cursor: { blockIndex: number; offset: number } | null }
   ): void {
     const room = this.rooms.get(msg.documentId);
@@ -341,7 +374,7 @@ export class CollaborationServer {
 
   private leaveRoom(
     ws: WebSocket,
-    clientMeta: { userId: string; displayName: string; color: string; documentId: string | null },
+    clientMeta: { userId: string; displayName: string; color: string; documentId: string | null; shareToken: string | null; readOnly: boolean },
     documentId: string
   ): void {
     const room = this.rooms.get(documentId);

@@ -261,6 +261,11 @@ describe('API Endpoints', () => {
     });
 
     it('returns 400 for invalid version number', async () => {
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'doc1', title: 'Test', content: '[]' }),
+      });
       const res = await fetch(`${baseUrl}/api/documents/doc1/versions/abc`);
       expect(res.status).toBe(400);
     });

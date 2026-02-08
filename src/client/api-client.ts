@@ -10,6 +10,8 @@ export interface DocumentRecord {
   id: string;
   title: string;
   content: string;
+  owner_id?: string | null;
+  permission?: string;
   created_at: string;
   updated_at: string;
 }
@@ -25,10 +27,26 @@ export interface SessionResponse {
   user: UserInfo;
 }
 
+export interface ShareRecord {
+  id: string;
+  document_id: string;
+  token: string;
+  permission: 'view' | 'edit';
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface SharedDocumentResponse {
+  document: DocumentRecord;
+  permission: 'view' | 'edit';
+  share_token: string;
+}
+
 const BASE = '/api/documents';
 const AUTH_BASE = '/api/auth';
 const TIMEOUT_MS = 3000;
 const TOKEN_KEY = 'altdocs_session_token';
+const SHARE_TOKEN_KEY = 'altdocs_share_token';
 
 // ── Token management ────────────────────────────────
 
@@ -50,14 +68,40 @@ export function clearStoredToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// ── Share token management ──────────────────────────
+
+let currentShareToken: string | null = null;
+
+export function setShareToken(token: string | null): void {
+  currentShareToken = token;
+  if (token) {
+    sessionStorage.setItem(SHARE_TOKEN_KEY, token);
+  } else {
+    sessionStorage.removeItem(SHARE_TOKEN_KEY);
+  }
+}
+
+export function getShareToken(): string | null {
+  return currentShareToken;
+}
+
+export function clearShareToken(): void {
+  currentShareToken = null;
+  sessionStorage.removeItem(SHARE_TOKEN_KEY);
+}
+
 // ── Fetch helpers ───────────────────────────────────
 
 function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
   const token = getStoredToken();
   if (token) {
-    return { Authorization: `Bearer ${token}` };
+    headers['Authorization'] = `Bearer ${token}`;
   }
-  return {};
+  if (currentShareToken) {
+    headers['X-Share-Token'] = currentShareToken;
+  }
+  return headers;
 }
 
 function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
@@ -203,5 +247,36 @@ export async function duplicateDocument(sourceId: string, newId: string, newTitl
     body: JSON.stringify({ id: newId, title: newTitle, content: source.content }),
   });
   if (!res.ok) throw new Error(`Failed to duplicate document: ${res.status}`);
+  return res.json();
+}
+
+// ── Sharing API ─────────────────────────────────────
+
+export async function createShareLink(docId: string, permission: 'view' | 'edit'): Promise<ShareRecord> {
+  const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(docId)}/shares`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ permission }),
+  });
+  if (!res.ok) throw new Error(`Failed to create share: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchShares(docId: string): Promise<ShareRecord[]> {
+  const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(docId)}/shares`);
+  if (!res.ok) throw new Error(`Failed to list shares: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteShareLink(docId: string, shareId: string): Promise<void> {
+  const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(docId)}/shares/${encodeURIComponent(shareId)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`Failed to delete share: ${res.status}`);
+}
+
+export async function fetchSharedDocument(token: string): Promise<SharedDocumentResponse> {
+  const res = await fetchWithTimeout(`/api/shared/${encodeURIComponent(token)}`);
+  if (!res.ok) throw new Error(`Failed to load shared document: ${res.status}`);
   return res.json();
 }

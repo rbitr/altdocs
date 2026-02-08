@@ -1,7 +1,7 @@
 import type { Operation, Position } from '../shared/model.js';
 import { transformOperation } from '../shared/ot.js';
 import type { Editor } from './editor.js';
-import { getStoredToken } from './api-client.js';
+import { getStoredToken, getShareToken } from './api-client.js';
 import type { ServerMessage, ClientMessage } from '../shared/protocol.js';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
@@ -65,7 +65,11 @@ export class CollaborationClient {
 
     // Build WebSocket URL — use current page's host with /ws path
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
+    let wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
+    const shareToken = getShareToken();
+    if (shareToken) {
+      wsUrl += `&share=${encodeURIComponent(shareToken)}`;
+    }
 
     this.ws = new WebSocket(wsUrl);
 
