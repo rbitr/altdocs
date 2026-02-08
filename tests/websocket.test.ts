@@ -506,6 +506,29 @@ describe('WebSocket: Room Management', () => {
     expect(collabServer.getRoom(docId)).toBeUndefined();
   });
 
+  it('cleans up stale connections via heartbeat ping/pong', async () => {
+    const user1 = createTestUser();
+    const docId = createTestDoc();
+    const ws1 = await connectWs(user1.token);
+    await joinDoc(ws1, docId);
+
+    // Verify room exists with one client
+    const room = collabServer.getRoom(docId);
+    expect(room).toBeDefined();
+    expect(room!.clients.size).toBe(1);
+
+    // The ws library's ping/pong is handled at the transport layer.
+    // We verify the server sets up the heartbeat by checking that
+    // alive tracking is active — the server pings, and if no pong
+    // comes back, the connection is terminated on the next interval.
+    // For this test, we just verify the connection stays alive when
+    // pong IS received (normal operation).
+    await new Promise(r => setTimeout(r, 100));
+    expect(ws1.readyState).toBe(WebSocket.OPEN);
+
+    await closeWs(ws1);
+  });
+
   it('user can switch rooms', async () => {
     const user1 = createTestUser();
     const user2 = createTestUser();

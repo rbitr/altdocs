@@ -18,6 +18,11 @@ export interface CollaborationEvents {
   onRemoteUsersChange?: (users: RemoteUser[]) => void;
 }
 
+/** Initial reconnection delay (ms). */
+const RECONNECT_BASE_DELAY = 1000;
+/** Maximum reconnection delay (ms). */
+const RECONNECT_MAX_DELAY = 30_000;
+
 /**
  * Manages the WebSocket connection and OT protocol for a single
  * document editing session.
@@ -47,6 +52,12 @@ export class CollaborationClient {
   private events: CollaborationEvents;
   private cursorDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Reconnection state
+  private intentionalClose: boolean = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectDelay: number = RECONNECT_BASE_DELAY;
+  private operationListenerAttached: boolean = false;
+
   constructor(editor: Editor, documentId: string, events: CollaborationEvents = {}) {
     this.editor = editor;
     this.documentId = documentId;
@@ -56,6 +67,8 @@ export class CollaborationClient {
   /** Connect to the collaboration server */
   connect(): void {
     if (this.ws) return;
+
+    this.intentionalClose = false;
 
     const token = getStoredToken();
     if (!token) return;
@@ -74,6 +87,8 @@ export class CollaborationClient {
     this.ws = new WebSocket(wsUrl);
 
     this.ws.addEventListener('open', () => {
+      // Reset backoff on successful connection
+      this.reconnectDelay = RECONNECT_BASE_DELAY;
       // Join the document room
       this.send({ type: 'join', documentId: this.documentId });
     });
@@ -93,18 +108,31 @@ export class CollaborationClient {
       this.events.onConnectionChange?.(this.state);
       this.remoteUsers.clear();
       this.events.onRemoteUsersChange?.([...this.remoteUsers.values()]);
+
+      // Auto-reconnect unless intentionally closed
+      if (!this.intentionalClose) {
+        this.scheduleReconnect();
+      }
     });
 
     this.ws.addEventListener('error', () => {
       // error is followed by close event
     });
 
-    // Wire up the editor's operation callback
-    this.editor.onOperation((op: Operation) => this.handleLocalOperation(op));
+    // Wire up the editor's operation callback (only once)
+    if (!this.operationListenerAttached) {
+      this.editor.onOperation((op: Operation) => this.handleLocalOperation(op));
+      this.operationListenerAttached = true;
+    }
   }
 
   /** Disconnect from the collaboration server */
   disconnect(): void {
+    this.intentionalClose = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.cursorDebounceTimer) {
       clearTimeout(this.cursorDebounceTimer);
       this.cursorDebounceTimer = null;
@@ -129,6 +157,26 @@ export class CollaborationClient {
 
   getServerVersion(): number {
     return this.serverVersion;
+  }
+
+  /** Current reconnection delay (for testing). */
+  getReconnectDelay(): number {
+    return this.reconnectDelay;
+  }
+
+  // ── Reconnection ──────────────────────────────────────
+
+  private scheduleReconnect(): void {
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      // Clear stale OT state — after disconnect, inflight/buffered are no longer valid
+      this.inflight = null;
+      this.buffered = [];
+      this.connect();
+    }, this.reconnectDelay);
+
+    // Exponential backoff with cap
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_MAX_DELAY);
   }
 
   // ── Message handling ──────────────────────────────────

@@ -51,15 +51,26 @@ export interface DocumentRoom {
 /** Maximum operation history to keep per room (for OT transformation lookback). */
 const MAX_HISTORY_LENGTH = 1000;
 
+/** Interval between server pings to detect stale connections (ms). */
+const PING_INTERVAL = 30_000;
+
+/** Time to wait for a pong response before considering a connection dead (ms). */
+const PONG_TIMEOUT = 10_000;
+
 export class CollaborationServer {
   private wss: WebSocketServer;
   private rooms: Map<string, DocumentRoom> = new Map();
   /** Map from WebSocket to client metadata */
   private wsClients: Map<WebSocket, { userId: string; displayName: string; color: string; documentId: string | null; shareToken: string | null; readOnly: boolean }> = new Map();
+  /** Track liveness per WebSocket: true = alive (pong received since last ping) */
+  private alive: Map<WebSocket, boolean> = new Map();
+  /** Heartbeat interval handle */
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(server: Server) {
     this.wss = new WebSocketServer({ server });
     this.wss.on('connection', (ws, req) => this.handleConnection(ws, req));
+    this.startHeartbeat();
   }
 
   /** Get a room (for testing). */
@@ -74,7 +85,29 @@ export class CollaborationServer {
 
   /** Close the WebSocket server. */
   close(): void {
+    this.stopHeartbeat();
     this.wss.close();
+  }
+
+  private startHeartbeat(): void {
+    this.pingInterval = setInterval(() => {
+      for (const [ws] of this.wsClients) {
+        if (!this.alive.get(ws)) {
+          // No pong received since last ping — terminate
+          ws.terminate();
+          continue;
+        }
+        this.alive.set(ws, false);
+        ws.ping();
+      }
+    }, PING_INTERVAL);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
   }
 
   private handleConnection(ws: WebSocket, req: IncomingMessage): void {
@@ -121,6 +154,12 @@ export class CollaborationServer {
       documentId: null,
       shareToken,
       readOnly: false,
+    });
+
+    // Mark connection as alive for heartbeat
+    this.alive.set(ws, true);
+    ws.on('pong', () => {
+      this.alive.set(ws, true);
     });
 
     ws.on('message', (data) => {
@@ -370,6 +409,7 @@ export class CollaborationServer {
     }
 
     this.wsClients.delete(ws);
+    this.alive.delete(ws);
   }
 
   private leaveRoom(
