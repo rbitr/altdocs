@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Editor } from '../src/client/editor.js';
-import type { Document, Block } from '../src/shared/model.js';
+import type { Document, Block, Operation } from '../src/shared/model.js';
 import { blockToPlainText } from '../src/shared/model.js';
 import { collapsedCursor, isCollapsed, getSelectionRange } from '../src/shared/cursor.js';
 
@@ -1182,6 +1182,47 @@ describe('Editor - horizontal rule', () => {
     expect(editor.doc.blocks[1].type).toBe('paragraph');
     expect(getBlockText(editor, 1)).toBe('after');
     expect(editor.cursor.focus.blockIndex).toBe(1);
+  });
+
+  it('Backspace at start of block after HR emits delete_block operation', () => {
+    const editor = createEditor(makeDoc([
+      makeBlock('before'),
+      {
+        id: 'hr1', type: 'horizontal-rule', alignment: 'left',
+        runs: [{ text: '', style: {} }],
+      },
+      makeBlock('after'),
+    ]));
+    const ops: Operation[] = [];
+    editor.onOperation((op) => ops.push(op));
+    editor.cursor = collapsedCursor({ blockIndex: 2, offset: 0 });
+    editor.handleKeyDown(makeKeyEvent('Backspace'));
+    expect(ops).toHaveLength(1);
+    expect(ops[0].type).toBe('delete_block');
+    if (ops[0].type === 'delete_block') {
+      expect(ops[0].blockIndex).toBe(1);
+    }
+  });
+
+  it('Backspace at start of block after image emits delete_block operation', () => {
+    const editor = createEditor(makeDoc([
+      makeBlock('before'),
+      {
+        id: 'img1', type: 'image', alignment: 'left',
+        runs: [{ text: '', style: {} }],
+        imageUrl: '/uploads/test.png',
+      },
+      makeBlock('after'),
+    ]));
+    const ops: Operation[] = [];
+    editor.onOperation((op) => ops.push(op));
+    editor.cursor = collapsedCursor({ blockIndex: 2, offset: 0 });
+    editor.handleKeyDown(makeKeyEvent('Backspace'));
+    expect(ops).toHaveLength(1);
+    expect(ops[0].type).toBe('delete_block');
+    if (ops[0].type === 'delete_block') {
+      expect(ops[0].blockIndex).toBe(1);
+    }
   });
 
   it('blocks text input on horizontal rule', () => {

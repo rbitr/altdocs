@@ -247,11 +247,11 @@ function transformWithPriority(
     case 'insert_block':
       return transformInsertBlockOp(op, other, hasPriority);
     case 'set_indent':
-      return transformSetIndent(op, other);
+      return transformSetIndent(op, other, hasPriority);
     case 'set_image':
-      return transformSetImage(op, other);
+      return transformSetImage(op, other, hasPriority);
     case 'set_line_spacing':
-      return transformSetLineSpacing(op, other);
+      return transformSetLineSpacing(op, other, hasPriority);
     case 'delete_block':
       return transformDeleteBlock(op, other);
   }
@@ -743,7 +743,11 @@ function transformBlockIndex(blockIndex: number, other: Operation): number {
 // Transform set_indent against other operations
 // ============================================================
 
-function transformSetIndent(op: SetIndentOp, other: Operation): SetIndentOp {
+function transformSetIndent(op: SetIndentOp, other: Operation, hasPriority: boolean): SetIndentOp {
+  // Concurrent set_indent on same block: priority op wins
+  if (other.type === 'set_indent' && other.blockIndex === op.blockIndex && !hasPriority) {
+    return { ...op, indentLevel: other.indentLevel };
+  }
   const newIndex = transformBlockIndex(op.blockIndex, other);
   return { ...op, blockIndex: newIndex };
 }
@@ -752,7 +756,11 @@ function transformSetIndent(op: SetIndentOp, other: Operation): SetIndentOp {
 // Transform set_image against other operations
 // ============================================================
 
-function transformSetImage(op: SetImageOp, other: Operation): SetImageOp {
+function transformSetImage(op: SetImageOp, other: Operation, hasPriority: boolean): SetImageOp {
+  // Concurrent set_image on same block: priority op wins
+  if (other.type === 'set_image' && other.blockIndex === op.blockIndex && !hasPriority) {
+    return { ...op, imageUrl: other.imageUrl };
+  }
   const newIndex = transformBlockIndex(op.blockIndex, other);
   return { ...op, blockIndex: newIndex };
 }
@@ -761,7 +769,11 @@ function transformSetImage(op: SetImageOp, other: Operation): SetImageOp {
 // Transform set_line_spacing against other operations
 // ============================================================
 
-function transformSetLineSpacing(op: SetLineSpacingOp, other: Operation): SetLineSpacingOp {
+function transformSetLineSpacing(op: SetLineSpacingOp, other: Operation, hasPriority: boolean): SetLineSpacingOp {
+  // Concurrent set_line_spacing on same block: priority op wins
+  if (other.type === 'set_line_spacing' && other.blockIndex === op.blockIndex && !hasPriority) {
+    return { ...op, lineSpacing: other.lineSpacing };
+  }
   const newIndex = transformBlockIndex(op.blockIndex, other);
   return { ...op, blockIndex: newIndex };
 }

@@ -151,13 +151,13 @@ describe('OT: set_indent', () => {
     expect(bPrime).toEqual({ type: 'set_indent', blockIndex: 0, indentLevel: 1 });
   });
 
-  it('set_indent vs set_indent same block — both apply (last one wins)', () => {
+  it('set_indent vs set_indent same block — priority op (a) wins', () => {
     const a: Operation = { type: 'set_indent', blockIndex: 0, indentLevel: 2 };
     const b: Operation = { type: 'set_indent', blockIndex: 0, indentLevel: 3 };
     const [aPrime, bPrime] = transformOperation(a, b);
-    // Both transform to same blockIndex — both apply, last one wins at application
+    // a has priority: a' keeps its value, b' adopts a's value for convergence
     expect(aPrime).toEqual({ type: 'set_indent', blockIndex: 0, indentLevel: 2 });
-    expect(bPrime).toEqual({ type: 'set_indent', blockIndex: 0, indentLevel: 3 });
+    expect(bPrime).toEqual({ type: 'set_indent', blockIndex: 0, indentLevel: 2 });
   });
 
   it('transformSingle: set_indent against split_block', () => {

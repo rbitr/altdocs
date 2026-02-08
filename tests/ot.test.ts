@@ -3128,3 +3128,408 @@ describe('delete_block transforms', () => {
     });
   });
 });
+
+// ============================================================
+// Block-indexed operation cross-combinations (set_indent, set_image, set_line_spacing)
+// ============================================================
+
+describe('OT: set_indent cross-combinations', () => {
+  describe('set_indent vs set_indent', () => {
+    it('concurrent indent on same block: priority op (a) wins', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'set_indent', blockIndex: 1, indentLevel: 2 };
+      const opB: Operation = { type: 'set_indent', blockIndex: 1, indentLevel: 5 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      // Priority op (a) wins — both paths converge to a's value
+      expect(docAB.blocks[1].indentLevel).toBe(2);
+      expect(docBA.blocks[1].indentLevel).toBe(2);
+    });
+
+    it('concurrent indent on different blocks: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'set_indent', blockIndex: 0, indentLevel: 1 };
+      const opB: Operation = { type: 'set_indent', blockIndex: 2, indentLevel: 3 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].indentLevel).toBe(1);
+      expect(docAB.blocks[2].indentLevel).toBe(3);
+      expect(docBA.blocks[0].indentLevel).toBe(1);
+      expect(docBA.blocks[2].indentLevel).toBe(3);
+    });
+  });
+
+  describe('set_indent vs insert_text', () => {
+    it('insert text in same block as indent: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'set_indent', blockIndex: 1, indentLevel: 3 };
+      const opB: Operation = { type: 'insert_text', position: { blockIndex: 1, offset: 1 }, text: 'X' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[1].indentLevel).toBe(3);
+      expect(getBlockText(docAB, 1)).toBe('BXBB');
+      expect(docBA.blocks[1].indentLevel).toBe(3);
+      expect(getBlockText(docBA, 1)).toBe('BXBB');
+    });
+  });
+
+  describe('set_indent vs split_block', () => {
+    it('split block before indented block: index shifts', () => {
+      const doc = makeDoc([makeBlock('AABB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'set_indent', blockIndex: 1, indentLevel: 2 };
+      const opB: Operation = { type: 'split_block', position: { blockIndex: 0, offset: 2 } };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3);
+      expect(docAB.blocks[2].indentLevel).toBe(2);
+      expect(docBA.blocks[2].indentLevel).toBe(2);
+    });
+
+    it('split the indented block itself: indent stays on first half', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBCC')]);
+      doc.blocks[1].indentLevel = 1;
+      const opA: Operation = { type: 'set_indent', blockIndex: 1, indentLevel: 4 };
+      const opB: Operation = { type: 'split_block', position: { blockIndex: 1, offset: 2 } };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3);
+      expect(docAB.blocks[1].indentLevel).toBe(4);
+      expect(docBA.blocks[1].indentLevel).toBe(4);
+    });
+  });
+
+  describe('set_indent vs merge_block', () => {
+    it('merge block after indented block: indent unaffected', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'set_indent', blockIndex: 0, indentLevel: 2 };
+      const opB: Operation = { type: 'merge_block', blockIndex: 2 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docAB.blocks[0].indentLevel).toBe(2);
+      expect(docBA.blocks[0].indentLevel).toBe(2);
+    });
+  });
+
+  describe('set_indent vs insert_block', () => {
+    it('insert block before indented block: index shifts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'set_indent', blockIndex: 1, indentLevel: 3 };
+      const opB: Operation = { type: 'insert_block', afterBlockIndex: 0, blockType: 'paragraph' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3);
+      expect(docAB.blocks[2].indentLevel).toBe(3);
+      expect(docBA.blocks[2].indentLevel).toBe(3);
+    });
+  });
+
+  describe('set_indent vs change_block_type', () => {
+    it('concurrent indent and type change on same block: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'set_indent', blockIndex: 1, indentLevel: 2 };
+      const opB: Operation = { type: 'change_block_type', blockIndex: 1, newType: 'heading1' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[1].indentLevel).toBe(2);
+      expect(docAB.blocks[1].type).toBe('heading1');
+      expect(docBA.blocks[1].indentLevel).toBe(2);
+      expect(docBA.blocks[1].type).toBe('heading1');
+    });
+  });
+});
+
+describe('OT: set_image cross-combinations', () => {
+  describe('set_image vs set_image', () => {
+    it('concurrent image set on same block: priority op (a) wins', () => {
+      const doc = makeDoc([makeBlock(''), makeBlock('text')]);
+      doc.blocks[0].type = 'image';
+      const opA: Operation = { type: 'set_image', blockIndex: 0, imageUrl: '/img/a.png' };
+      const opB: Operation = { type: 'set_image', blockIndex: 0, imageUrl: '/img/b.png' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].imageUrl).toBe('/img/a.png');
+      expect(docBA.blocks[0].imageUrl).toBe('/img/a.png');
+    });
+
+    it('concurrent image set on different blocks: both applied', () => {
+      const doc = makeDoc([makeBlock(''), makeBlock(''), makeBlock('text')]);
+      doc.blocks[0].type = 'image';
+      doc.blocks[1].type = 'image';
+      const opA: Operation = { type: 'set_image', blockIndex: 0, imageUrl: '/img/a.png' };
+      const opB: Operation = { type: 'set_image', blockIndex: 1, imageUrl: '/img/b.png' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].imageUrl).toBe('/img/a.png');
+      expect(docAB.blocks[1].imageUrl).toBe('/img/b.png');
+      expect(docBA.blocks[0].imageUrl).toBe('/img/a.png');
+      expect(docBA.blocks[1].imageUrl).toBe('/img/b.png');
+    });
+  });
+
+  describe('set_image vs insert_text', () => {
+    it('insert text in block before image: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('')]);
+      doc.blocks[1].type = 'image';
+      const opA: Operation = { type: 'set_image', blockIndex: 1, imageUrl: '/img/test.png' };
+      const opB: Operation = { type: 'insert_text', position: { blockIndex: 0, offset: 1 }, text: 'X' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[1].imageUrl).toBe('/img/test.png');
+      expect(getBlockText(docAB, 0)).toBe('AXAA');
+      expect(docBA.blocks[1].imageUrl).toBe('/img/test.png');
+      expect(getBlockText(docBA, 0)).toBe('AXAA');
+    });
+  });
+
+  describe('set_image vs split_block', () => {
+    it('split block before image: image index shifts', () => {
+      const doc = makeDoc([makeBlock('AABB'), makeBlock('')]);
+      doc.blocks[1].type = 'image';
+      const opA: Operation = { type: 'set_image', blockIndex: 1, imageUrl: '/img/test.png' };
+      const opB: Operation = { type: 'split_block', position: { blockIndex: 0, offset: 2 } };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3);
+      expect(docAB.blocks[2].imageUrl).toBe('/img/test.png');
+      expect(docBA.blocks[2].imageUrl).toBe('/img/test.png');
+    });
+  });
+
+  describe('set_image vs delete_block', () => {
+    it('delete block before image: image index shifts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('')]);
+      doc.blocks[2].type = 'image';
+      const opA: Operation = { type: 'set_image', blockIndex: 2, imageUrl: '/img/test.png' };
+      const opB: Operation = { type: 'delete_block', blockIndex: 0 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docAB.blocks[1].imageUrl).toBe('/img/test.png');
+      expect(docBA.blocks[1].imageUrl).toBe('/img/test.png');
+    });
+
+    it('delete the image block itself: set_image becomes no-op', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock(''), makeBlock('CCC')]);
+      doc.blocks[1].type = 'image';
+      const opA: Operation = { type: 'set_image', blockIndex: 1, imageUrl: '/img/test.png' };
+      const opB: Operation = { type: 'delete_block', blockIndex: 1 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docBA.blocks).toHaveLength(2);
+    });
+  });
+
+  describe('set_image vs insert_block', () => {
+    it('insert block before image: image index shifts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('')]);
+      doc.blocks[1].type = 'image';
+      const opA: Operation = { type: 'set_image', blockIndex: 1, imageUrl: '/img/test.png' };
+      const opB: Operation = { type: 'insert_block', afterBlockIndex: 0, blockType: 'paragraph' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3);
+      expect(docAB.blocks[2].imageUrl).toBe('/img/test.png');
+      expect(docBA.blocks[2].imageUrl).toBe('/img/test.png');
+    });
+  });
+
+  describe('set_image vs set_indent', () => {
+    it('concurrent image and indent on different blocks: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('')]);
+      doc.blocks[1].type = 'image';
+      const opA: Operation = { type: 'set_image', blockIndex: 1, imageUrl: '/img/test.png' };
+      const opB: Operation = { type: 'set_indent', blockIndex: 0, indentLevel: 3 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[1].imageUrl).toBe('/img/test.png');
+      expect(docAB.blocks[0].indentLevel).toBe(3);
+      expect(docBA.blocks[1].imageUrl).toBe('/img/test.png');
+      expect(docBA.blocks[0].indentLevel).toBe(3);
+    });
+
+    it('concurrent image and indent on same block: both applied', () => {
+      const doc = makeDoc([makeBlock('')]);
+      doc.blocks[0].type = 'image';
+      const opA: Operation = { type: 'set_image', blockIndex: 0, imageUrl: '/img/test.png' };
+      const opB: Operation = { type: 'set_indent', blockIndex: 0, indentLevel: 2 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].imageUrl).toBe('/img/test.png');
+      expect(docAB.blocks[0].indentLevel).toBe(2);
+      expect(docBA.blocks[0].imageUrl).toBe('/img/test.png');
+      expect(docBA.blocks[0].indentLevel).toBe(2);
+    });
+  });
+});
+
+describe('OT: set_line_spacing cross-combinations', () => {
+  describe('set_line_spacing vs set_line_spacing', () => {
+    it('concurrent spacing on same block: priority op (a) wins', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 1, lineSpacing: 1.5 };
+      const opB: Operation = { type: 'set_line_spacing', blockIndex: 1, lineSpacing: 2.0 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[1].lineSpacing).toBe(1.5);
+      expect(docBA.blocks[1].lineSpacing).toBe(1.5);
+    });
+
+    it('concurrent spacing on different blocks: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 1.5 };
+      const opB: Operation = { type: 'set_line_spacing', blockIndex: 1, lineSpacing: 2.0 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].lineSpacing).toBe(1.5);
+      expect(docAB.blocks[1].lineSpacing).toBe(2.0);
+      expect(docBA.blocks[0].lineSpacing).toBe(1.5);
+      expect(docBA.blocks[1].lineSpacing).toBe(2.0);
+    });
+  });
+
+  describe('set_line_spacing vs insert_text', () => {
+    it('insert text in spaced block: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 1.5 };
+      const opB: Operation = { type: 'insert_text', position: { blockIndex: 0, offset: 1 }, text: 'X' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].lineSpacing).toBe(1.5);
+      expect(getBlockText(docAB, 0)).toBe('AXAA');
+      expect(docBA.blocks[0].lineSpacing).toBe(1.5);
+      expect(getBlockText(docBA, 0)).toBe('AXAA');
+    });
+  });
+
+  describe('set_line_spacing vs split_block', () => {
+    it('split block before spaced block: index shifts', () => {
+      const doc = makeDoc([makeBlock('AABB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 1, lineSpacing: 2.0 };
+      const opB: Operation = { type: 'split_block', position: { blockIndex: 0, offset: 2 } };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3);
+      expect(docAB.blocks[2].lineSpacing).toBe(2.0);
+      expect(docBA.blocks[2].lineSpacing).toBe(2.0);
+    });
+  });
+
+  describe('set_line_spacing vs delete_block', () => {
+    it('delete block before spaced block: index shifts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 2, lineSpacing: 1.15 };
+      const opB: Operation = { type: 'delete_block', blockIndex: 0 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docAB.blocks[1].lineSpacing).toBe(1.15);
+      expect(docBA.blocks[1].lineSpacing).toBe(1.15);
+    });
+
+    it('delete the spaced block itself: set_line_spacing becomes no-op', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 1, lineSpacing: 2.0 };
+      const opB: Operation = { type: 'delete_block', blockIndex: 1 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docBA.blocks).toHaveLength(2);
+    });
+  });
+
+  describe('set_line_spacing vs insert_block', () => {
+    it('insert block before spaced block: index shifts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 1, lineSpacing: 1.5 };
+      const opB: Operation = { type: 'insert_block', afterBlockIndex: 0, blockType: 'paragraph' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3);
+      expect(docAB.blocks[2].lineSpacing).toBe(1.5);
+      expect(docBA.blocks[2].lineSpacing).toBe(1.5);
+    });
+  });
+
+  describe('set_line_spacing vs merge_block', () => {
+    it('merge block after spaced block: spacing unaffected', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 2.0 };
+      const opB: Operation = { type: 'merge_block', blockIndex: 2 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docAB.blocks[0].lineSpacing).toBe(2.0);
+      expect(docBA.blocks[0].lineSpacing).toBe(2.0);
+    });
+  });
+
+  describe('set_line_spacing vs set_indent', () => {
+    it('concurrent spacing and indent on same block: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 1.5 };
+      const opB: Operation = { type: 'set_indent', blockIndex: 0, indentLevel: 3 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].lineSpacing).toBe(1.5);
+      expect(docAB.blocks[0].indentLevel).toBe(3);
+      expect(docBA.blocks[0].lineSpacing).toBe(1.5);
+      expect(docBA.blocks[0].indentLevel).toBe(3);
+    });
+
+    it('concurrent spacing and indent on different blocks: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 2.0 };
+      const opB: Operation = { type: 'set_indent', blockIndex: 1, indentLevel: 5 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].lineSpacing).toBe(2.0);
+      expect(docAB.blocks[1].indentLevel).toBe(5);
+      expect(docBA.blocks[0].lineSpacing).toBe(2.0);
+      expect(docBA.blocks[1].indentLevel).toBe(5);
+    });
+  });
+
+  describe('set_line_spacing vs set_image', () => {
+    it('concurrent spacing and image on different blocks: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('')]);
+      doc.blocks[1].type = 'image';
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 1.5 };
+      const opB: Operation = { type: 'set_image', blockIndex: 1, imageUrl: '/img/test.png' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].lineSpacing).toBe(1.5);
+      expect(docAB.blocks[1].imageUrl).toBe('/img/test.png');
+      expect(docBA.blocks[0].lineSpacing).toBe(1.5);
+      expect(docBA.blocks[1].imageUrl).toBe('/img/test.png');
+    });
+
+    it('concurrent spacing and image on same block: both applied', () => {
+      const doc = makeDoc([makeBlock('')]);
+      doc.blocks[0].type = 'image';
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 2.0 };
+      const opB: Operation = { type: 'set_image', blockIndex: 0, imageUrl: '/img/test.png' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].lineSpacing).toBe(2.0);
+      expect(docAB.blocks[0].imageUrl).toBe('/img/test.png');
+      expect(docBA.blocks[0].lineSpacing).toBe(2.0);
+      expect(docBA.blocks[0].imageUrl).toBe('/img/test.png');
+    });
+  });
+
+  describe('set_line_spacing vs change_block_type', () => {
+    it('concurrent spacing and type change on same block: both applied', () => {
+      const doc = makeDoc([makeBlock('AAA')]);
+      const opA: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 1.5 };
+      const opB: Operation = { type: 'change_block_type', blockIndex: 0, newType: 'heading2' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks[0].lineSpacing).toBe(1.5);
+      expect(docAB.blocks[0].type).toBe('heading2');
+      expect(docBA.blocks[0].lineSpacing).toBe(1.5);
+      expect(docBA.blocks[0].type).toBe('heading2');
+    });
+  });
+});

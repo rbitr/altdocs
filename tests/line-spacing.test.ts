@@ -150,12 +150,13 @@ describe('OT: set_line_spacing', () => {
     expect(bPrime).toEqual({ type: 'set_line_spacing', blockIndex: 0, lineSpacing: 2.0 });
   });
 
-  it('set_line_spacing vs set_line_spacing same block — both apply (last one wins)', () => {
+  it('set_line_spacing vs set_line_spacing same block — priority op (a) wins', () => {
     const a: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 1.5 };
     const b: Operation = { type: 'set_line_spacing', blockIndex: 0, lineSpacing: 2.0 };
     const [aPrime, bPrime] = transformOperation(a, b);
+    // a has priority: a' keeps its value, b' adopts a's value for convergence
     expect(aPrime).toEqual({ type: 'set_line_spacing', blockIndex: 0, lineSpacing: 1.5 });
-    expect(bPrime).toEqual({ type: 'set_line_spacing', blockIndex: 0, lineSpacing: 2.0 });
+    expect(bPrime).toEqual({ type: 'set_line_spacing', blockIndex: 0, lineSpacing: 1.5 });
   });
 
   it('transformSingle: set_line_spacing against split_block', () => {

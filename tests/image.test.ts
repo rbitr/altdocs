@@ -181,12 +181,13 @@ describe('OT: set_image', () => {
     expect(bPrime).toEqual({ type: 'set_image', blockIndex: 0, imageUrl: '/uploads/test.png' });
   });
 
-  it('two concurrent set_image on same block — both apply (last wins)', () => {
+  it('two concurrent set_image on same block — priority op (a) wins', () => {
     const a: Operation = { type: 'set_image', blockIndex: 0, imageUrl: '/uploads/a.png' };
     const b: Operation = { type: 'set_image', blockIndex: 0, imageUrl: '/uploads/b.png' };
     const [aPrime, bPrime] = transformOperation(a, b);
+    // a has priority: a' keeps its value, b' adopts a's value for convergence
     expect(aPrime).toEqual({ type: 'set_image', blockIndex: 0, imageUrl: '/uploads/a.png' });
-    expect(bPrime).toEqual({ type: 'set_image', blockIndex: 0, imageUrl: '/uploads/b.png' });
+    expect(bPrime).toEqual({ type: 'set_image', blockIndex: 0, imageUrl: '/uploads/a.png' });
   });
 
   it('transformSingle: set_image against split_block', () => {

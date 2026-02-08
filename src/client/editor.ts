@@ -485,9 +485,13 @@ export class Editor {
     } else if (pos.blockIndex > 0) {
       const prevBlock = this.doc.blocks[pos.blockIndex - 1];
 
-      // If previous block is a void block (HR or image), delete it
+      // If previous block is a void block (HR or image), delete it via operation
       if (prevBlock.type === 'horizontal-rule' || prevBlock.type === 'image') {
-        this.doc.blocks.splice(pos.blockIndex - 1, 1);
+        const deleteOp: Operation = {
+          type: 'delete_block',
+          blockIndex: pos.blockIndex - 1,
+        };
+        this.applyLocal(deleteOp);
         this.cursor = collapsedCursor({
           blockIndex: pos.blockIndex - 1,
           offset: 0,
