@@ -12,7 +12,8 @@ export type BlockType =
   | 'blockquote'
   | 'code-block'
   | 'horizontal-rule'
-  | 'image';
+  | 'image'
+  | 'table';
 
 export type Alignment = 'left' | 'center' | 'right';
 
@@ -33,6 +34,10 @@ export interface TextRun {
   style: TextStyle;
 }
 
+export interface TableCell {
+  runs: TextRun[];
+}
+
 export type LineSpacing = 1.0 | 1.15 | 1.5 | 2.0;
 
 export const VALID_LINE_SPACINGS: readonly number[] = [1.0, 1.15, 1.5, 2.0];
@@ -44,6 +49,7 @@ export interface Block {
   indentLevel?: number;
   lineSpacing?: LineSpacing;
   imageUrl?: string;
+  tableData?: TableCell[][];
   runs: TextRun[];
 }
 
@@ -149,6 +155,12 @@ export interface DeleteBlockOp {
   blockIndex: number;
 }
 
+export interface SetTableDataOp {
+  type: 'set_table_data';
+  blockIndex: number;
+  tableData: TableCell[][];
+}
+
 export type Operation =
   | InsertTextOp
   | DeleteTextOp
@@ -162,7 +174,8 @@ export type Operation =
   | SetIndentOp
   | SetImageOp
   | SetLineSpacingOp
-  | DeleteBlockOp;
+  | DeleteBlockOp
+  | SetTableDataOp;
 
 // ============================================================
 // Helper Functions
@@ -298,6 +311,14 @@ function styleAtOffset(runs: TextRun[], offset: number): TextStyle {
 // Deep clone helper
 // ============================================================
 
+function cloneCell(cell: TableCell): TableCell {
+  return { runs: cell.runs.map((r) => ({ text: r.text, style: { ...r.style } })) };
+}
+
+function cloneTableData(tableData: TableCell[][]): TableCell[][] {
+  return tableData.map((row) => row.map(cloneCell));
+}
+
 function cloneBlock(block: Block): Block {
   const clone: Block = {
     id: block.id,
@@ -311,6 +332,9 @@ function cloneBlock(block: Block): Block {
   }
   if (block.lineSpacing !== undefined) {
     clone.lineSpacing = block.lineSpacing;
+  }
+  if (block.tableData !== undefined) {
+    clone.tableData = cloneTableData(block.tableData);
   }
   return clone;
 }
@@ -367,6 +391,8 @@ export function applyOperation(doc: Document, op: Operation): Document {
       return applySetLineSpacing(result, op);
     case 'delete_block':
       return applyDeleteBlock(result, op);
+    case 'set_table_data':
+      return applySetTableData(result, op);
   }
 }
 
@@ -603,8 +629,32 @@ function applyInsertBlock(doc: Document, op: InsertBlockOp): Document {
     indentLevel: 0,
     runs: [{ text: '', style: {} }],
   };
+  if (op.blockType === 'table') {
+    newBlock.tableData = createDefaultTableData();
+  }
   doc.blocks.splice(insertAt, 0, newBlock);
   return doc;
+}
+
+/** Create a default 2x2 table */
+function createDefaultTableData(): TableCell[][] {
+  return [
+    [{ runs: [{ text: '', style: {} }] }, { runs: [{ text: '', style: {} }] }],
+    [{ runs: [{ text: '', style: {} }] }, { runs: [{ text: '', style: {} }] }],
+  ];
+}
+
+/** Create a table with specified dimensions */
+export function createTableData(rows: number, cols: number): TableCell[][] {
+  const data: TableCell[][] = [];
+  for (let r = 0; r < rows; r++) {
+    const row: TableCell[] = [];
+    for (let c = 0; c < cols; c++) {
+      row.push({ runs: [{ text: '', style: {} }] });
+    }
+    data.push(row);
+  }
+  return data;
 }
 
 function applySetIndent(doc: Document, op: SetIndentOp): Document {
@@ -641,6 +691,13 @@ function applyDeleteBlock(doc: Document, op: DeleteBlockOp): Document {
     return doc;
   }
   doc.blocks.splice(op.blockIndex, 1);
+  return doc;
+}
+
+function applySetTableData(doc: Document, op: SetTableDataOp): Document {
+  const block = doc.blocks[op.blockIndex];
+  if (!block) return doc;
+  block.tableData = cloneTableData(op.tableData);
   return doc;
 }
 

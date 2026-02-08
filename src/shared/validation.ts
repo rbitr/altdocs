@@ -3,7 +3,7 @@ import type { BlockType, Alignment } from './model.js';
 const VALID_BLOCK_TYPES: Set<string> = new Set<string>([
   'paragraph', 'heading1', 'heading2', 'heading3',
   'bullet-list-item', 'numbered-list-item',
-  'blockquote', 'code-block', 'horizontal-rule', 'image',
+  'blockquote', 'code-block', 'horizontal-rule', 'image', 'table',
 ]);
 
 const VALID_ALIGNMENTS: Set<string> = new Set<string>(['left', 'center', 'right']);
@@ -77,6 +77,12 @@ function validateBlock(block: unknown, index: number): string | null {
     }
   }
 
+  // tableData is optional but must be a valid 2D array of cells if present
+  if (b.tableData !== undefined) {
+    const err = validateTableData(b.tableData, index);
+    if (err) return err;
+  }
+
   if (!Array.isArray(b.runs)) {
     return `Block ${index}: 'runs' must be an array`;
   }
@@ -90,6 +96,45 @@ function validateBlock(block: unknown, index: number): string | null {
     if (err) return err;
   }
 
+  return null;
+}
+
+function validateTableData(tableData: unknown, blockIndex: number): string | null {
+  if (!Array.isArray(tableData)) {
+    return `Block ${blockIndex}: 'tableData' must be an array`;
+  }
+  if (tableData.length === 0) {
+    return `Block ${blockIndex}: 'tableData' must have at least one row`;
+  }
+  const colCount = Array.isArray(tableData[0]) ? (tableData[0] as unknown[]).length : 0;
+  if (colCount === 0) {
+    return `Block ${blockIndex}: table rows must have at least one cell`;
+  }
+  for (let r = 0; r < tableData.length; r++) {
+    const row = tableData[r];
+    if (!Array.isArray(row)) {
+      return `Block ${blockIndex}: table row ${r} must be an array`;
+    }
+    if (row.length !== colCount) {
+      return `Block ${blockIndex}: table row ${r} has ${row.length} cells, expected ${colCount}`;
+    }
+    for (let c = 0; c < row.length; c++) {
+      const cell = row[c] as Record<string, unknown> | null;
+      if (!cell || typeof cell !== 'object') {
+        return `Block ${blockIndex}: table cell [${r}][${c}] must be an object`;
+      }
+      if (!Array.isArray(cell.runs)) {
+        return `Block ${blockIndex}: table cell [${r}][${c}] 'runs' must be an array`;
+      }
+      if (cell.runs.length === 0) {
+        return `Block ${blockIndex}: table cell [${r}][${c}] 'runs' must have at least one element`;
+      }
+      for (let j = 0; j < cell.runs.length; j++) {
+        const err = validateRun(cell.runs[j], blockIndex, j);
+        if (err) return `Block ${blockIndex}, cell [${r}][${c}], run ${j}: ${err.split(': ').slice(1).join(': ')}`;
+      }
+    }
+  }
   return null;
 }
 

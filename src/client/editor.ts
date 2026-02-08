@@ -1,5 +1,5 @@
-import type { Document, Operation, Position, TextStyle, BlockType, Alignment, LineSpacing } from '../shared/model.js';
-import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange, generateBlockId, getIndentLevel, MAX_INDENT_LEVEL } from '../shared/model.js';
+import type { Document, Operation, Position, TextStyle, BlockType, Alignment, LineSpacing, TableCell, SetTableDataOp } from '../shared/model.js';
+import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange, generateBlockId, getIndentLevel, MAX_INDENT_LEVEL, createTableData, normalizeRuns } from '../shared/model.js';
 import { uploadImage } from './api-client.js';
 import type { CursorState } from '../shared/cursor.js';
 import {
@@ -20,6 +20,11 @@ import { HistoryManager } from '../shared/history.js';
 import { renderDocument } from './renderer.js';
 import { applyCursorToDOM, readCursorFromDOM, resolveDocumentPosition } from './cursor-renderer.js';
 
+/** Check if a block type is a void/container block that doesn't use standard text editing */
+function isVoidBlock(type: BlockType): boolean {
+  return type === 'horizontal-rule' || type === 'image' || type === 'table';
+}
+
 export class Editor {
   public doc: Document;
   public cursor: CursorState;
@@ -29,6 +34,8 @@ export class Editor {
   private onUpdateCallbacks: Array<() => void> = [];
   private onOperationCallbacks: Array<(op: Operation) => void> = [];
   private onShortcutsPanelToggle: (() => void) | null = null;
+  /** Currently focused table cell [row, col] or null if not in a table */
+  private activeTableCell: { blockIndex: number; row: number; col: number } | null = null;
 
   constructor(container: HTMLElement, doc?: Document) {
     this.container = container;
@@ -50,8 +57,25 @@ export class Editor {
     this.rendering = true;
     renderDocument(this.doc, this.container);
     applyCursorToDOM(this.container, this.doc, this.cursor);
+    this.highlightActiveTableCell();
     this.rendering = false;
     this.notifyUpdate();
+  }
+
+  /** Apply the active-cell CSS class to the currently active table cell */
+  private highlightActiveTableCell(): void {
+    // Remove all existing active cell highlights
+    this.container.querySelectorAll('td.active-cell').forEach((el) => {
+      el.classList.remove('active-cell');
+    });
+    if (!this.activeTableCell) return;
+    const { blockIndex, row, col } = this.activeTableCell;
+    const block = this.doc.blocks[blockIndex];
+    if (!block || block.type !== 'table') return;
+    const wrapper = this.container.querySelector(`.table-block[data-block-id="${block.id}"]`);
+    if (!wrapper) return;
+    const td = wrapper.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+    if (td) td.classList.add('active-cell');
   }
 
   private notifyUpdate(): void {
@@ -110,6 +134,45 @@ export class Editor {
   }
 
   private handleClick(e: MouseEvent): void {
+    const target = e.target as HTMLElement;
+
+    // Check if clicking a table cell
+    const td = target.closest('td[data-row][data-col]') as HTMLElement | null;
+    if (td) {
+      const tableWrapper = td.closest('.table-block[data-block-id]') as HTMLElement | null;
+      if (tableWrapper) {
+        const blockId = tableWrapper.dataset.blockId;
+        const blockIndex = this.doc.blocks.findIndex((b) => b.id === blockId);
+        if (blockIndex >= 0) {
+          const row = parseInt(td.dataset.row || '0', 10);
+          const col = parseInt(td.dataset.col || '0', 10);
+          this.setActiveTableCell(blockIndex, row, col);
+          return;
+        }
+      }
+    }
+
+    // Check if clicking table control buttons
+    const actionBtn = target.closest('[data-action]') as HTMLElement | null;
+    if (actionBtn) {
+      const tableWrapper = actionBtn.closest('.table-block[data-block-id]') as HTMLElement | null;
+      if (tableWrapper) {
+        const blockId = tableWrapper.dataset.blockId;
+        const blockIndex = this.doc.blocks.findIndex((b) => b.id === blockId);
+        if (blockIndex >= 0) {
+          const action = actionBtn.dataset.action;
+          if (action === 'add-row') {
+            this.addTableRow(blockIndex);
+          } else if (action === 'add-col') {
+            this.addTableColumn(blockIndex);
+          }
+          return;
+        }
+      }
+    }
+
+    // Not clicking a table — clear active table cell
+    this.clearActiveTableCell();
     this.syncCursorFromDOM();
   }
 
@@ -205,9 +268,13 @@ export class Editor {
       return;
     }
 
-    // Tab / Shift+Tab for indent/outdent
+    // Tab / Shift+Tab: table cell navigation or indent/outdent
     if (e.key === 'Tab') {
       e.preventDefault();
+      if (this.activeTableCell) {
+        this.navigateTableCell(shift ? 'prev' : 'next');
+        return;
+      }
       if (shift) {
         this.outdent();
       } else {
@@ -273,9 +340,15 @@ export class Editor {
     // This handles cases where beforeinput doesn't fire (e.g., headless browsers).
     if (!ctrl && !e.altKey && e.key.length === 1) {
       e.preventDefault();
-      // Block text input on void blocks (horizontal rules, images)
+      // Block text input on void blocks (horizontal rules, images, tables)
       const block = this.doc.blocks[this.cursor.focus.blockIndex];
-      if (block && (block.type === 'horizontal-rule' || block.type === 'image')) return;
+      if (block && isVoidBlock(block.type)) {
+        // Tables handle their own text input via cell editing
+        if (block.type === 'table' && this.activeTableCell) {
+          this.insertTextInTableCell(e.key);
+        }
+        return;
+      }
       this.insertText(e.key);
       return;
     }
@@ -448,8 +521,14 @@ export class Editor {
     const pos = this.cursor.focus;
     const currentBlock = this.doc.blocks[pos.blockIndex];
 
-    // If current block is a void block (horizontal rule or image), delete it
-    if (currentBlock && (currentBlock.type === 'horizontal-rule' || currentBlock.type === 'image')) {
+    // If current block is a table with active cell, handle backspace in cell
+    if (currentBlock && currentBlock.type === 'table' && this.activeTableCell) {
+      this.backspaceInTableCell();
+      return;
+    }
+
+    // If current block is a void block (horizontal rule, image, table), delete it
+    if (currentBlock && isVoidBlock(currentBlock.type)) {
       const deleteOp: Operation = {
         type: 'delete_block',
         blockIndex: pos.blockIndex,
@@ -485,8 +564,8 @@ export class Editor {
     } else if (pos.blockIndex > 0) {
       const prevBlock = this.doc.blocks[pos.blockIndex - 1];
 
-      // If previous block is a void block (HR or image), delete it via operation
-      if (prevBlock.type === 'horizontal-rule' || prevBlock.type === 'image') {
+      // If previous block is a void block (HR, image, table), delete it via operation
+      if (isVoidBlock(prevBlock.type)) {
         const deleteOp: Operation = {
           type: 'delete_block',
           blockIndex: pos.blockIndex - 1,
@@ -560,8 +639,8 @@ export class Editor {
 
     const currentBlock = this.doc.blocks[this.cursor.focus.blockIndex];
 
-    // Void blocks (HR, images): Enter inserts a new paragraph after
-    if (currentBlock && (currentBlock.type === 'horizontal-rule' || currentBlock.type === 'image')) {
+    // Void blocks (HR, images, tables): Enter inserts a new paragraph after
+    if (currentBlock && isVoidBlock(currentBlock.type)) {
       const op: Operation = {
         type: 'insert_block',
         afterBlockIndex: this.cursor.focus.blockIndex,
@@ -860,6 +939,267 @@ export class Editor {
       }
     };
     input.click();
+  }
+
+  /** Insert a table after the current block */
+  insertTable(rows = 2, cols = 2): void {
+    this.pushHistory();
+
+    if (!isCollapsed(this.cursor)) {
+      this.deleteSelection();
+    }
+
+    const blockIndex = this.cursor.focus.blockIndex;
+
+    const insertOp: Operation = {
+      type: 'insert_block',
+      afterBlockIndex: blockIndex,
+      blockType: 'table',
+    };
+    this.applyLocal(insertOp);
+
+    const tableBlockIndex = blockIndex + 1;
+
+    // If non-default dimensions, update the table data
+    if (rows !== 2 || cols !== 2) {
+      const tableData = createTableData(rows, cols);
+      const setOp: Operation = {
+        type: 'set_table_data',
+        blockIndex: tableBlockIndex,
+        tableData,
+      };
+      this.applyLocal(setOp);
+    }
+
+    // Insert a paragraph after the table
+    const paraOp: Operation = {
+      type: 'insert_block',
+      afterBlockIndex: tableBlockIndex,
+      blockType: 'paragraph',
+    };
+    this.applyLocal(paraOp);
+
+    // Move cursor to the paragraph after the table
+    this.cursor = collapsedCursor({
+      blockIndex: tableBlockIndex + 1,
+      offset: 0,
+    });
+
+    this.render();
+  }
+
+  /** Get the currently active table cell, if any */
+  getActiveTableCell(): { blockIndex: number; row: number; col: number } | null {
+    return this.activeTableCell;
+  }
+
+  /** Set the active table cell for editing */
+  setActiveTableCell(blockIndex: number, row: number, col: number): void {
+    const block = this.doc.blocks[blockIndex];
+    if (!block || block.type !== 'table' || !block.tableData) return;
+    if (row < 0 || row >= block.tableData.length) return;
+    if (col < 0 || col >= block.tableData[0].length) return;
+    this.activeTableCell = { blockIndex, row, col };
+    this.cursor = collapsedCursor({ blockIndex, offset: 0 });
+    this.render();
+  }
+
+  /** Clear active table cell (e.g. when clicking outside table) */
+  clearActiveTableCell(): void {
+    this.activeTableCell = null;
+  }
+
+  /** Insert text into the active table cell */
+  private insertTextInTableCell(text: string): void {
+    if (!this.activeTableCell) return;
+    const { blockIndex, row, col } = this.activeTableCell;
+    const block = this.doc.blocks[blockIndex];
+    if (!block || !block.tableData) return;
+    const cell = block.tableData[row]?.[col];
+    if (!cell) return;
+
+    this.pushHistory();
+
+    // Clone the tableData and modify the target cell
+    const newTableData = block.tableData.map((r) =>
+      r.map((c) => ({ runs: c.runs.map((run) => ({ text: run.text, style: { ...run.style } })) }))
+    );
+    const targetCell = newTableData[row][col];
+    // Append text to the last run (or the first empty run)
+    const lastRun = targetCell.runs[targetCell.runs.length - 1];
+    lastRun.text += text;
+
+    const op: Operation = {
+      type: 'set_table_data',
+      blockIndex,
+      tableData: newTableData,
+    };
+    this.applyLocal(op);
+    this.render();
+  }
+
+  /** Handle backspace in the active table cell */
+  private backspaceInTableCell(): void {
+    if (!this.activeTableCell) return;
+    const { blockIndex, row, col } = this.activeTableCell;
+    const block = this.doc.blocks[blockIndex];
+    if (!block || !block.tableData) return;
+    const cell = block.tableData[row]?.[col];
+    if (!cell) return;
+
+    const totalText = cell.runs.reduce((s, r) => s + r.text, '');
+    if (totalText.length === 0) return; // nothing to delete
+
+    this.pushHistory();
+
+    const newTableData = block.tableData.map((r) =>
+      r.map((c) => ({ runs: c.runs.map((run) => ({ text: run.text, style: { ...run.style } })) }))
+    );
+    const targetCell = newTableData[row][col];
+    // Remove last character from the last non-empty run
+    for (let i = targetCell.runs.length - 1; i >= 0; i--) {
+      if (targetCell.runs[i].text.length > 0) {
+        targetCell.runs[i].text = targetCell.runs[i].text.slice(0, -1);
+        break;
+      }
+    }
+    // Normalize: remove empty runs, ensure at least one
+    targetCell.runs = normalizeRuns(targetCell.runs);
+    if (targetCell.runs.length === 0) {
+      targetCell.runs = [{ text: '', style: {} }];
+    }
+
+    const op: Operation = {
+      type: 'set_table_data',
+      blockIndex,
+      tableData: newTableData,
+    };
+    this.applyLocal(op);
+    this.render();
+  }
+
+  /** Navigate to prev/next table cell */
+  private navigateTableCell(direction: 'next' | 'prev'): void {
+    if (!this.activeTableCell) return;
+    const { blockIndex, row, col } = this.activeTableCell;
+    const block = this.doc.blocks[blockIndex];
+    if (!block || !block.tableData) return;
+
+    const rowCount = block.tableData.length;
+    const colCount = block.tableData[0].length;
+
+    if (direction === 'next') {
+      if (col < colCount - 1) {
+        this.setActiveTableCell(blockIndex, row, col + 1);
+      } else if (row < rowCount - 1) {
+        this.setActiveTableCell(blockIndex, row + 1, 0);
+      }
+      // At last cell, do nothing
+    } else {
+      if (col > 0) {
+        this.setActiveTableCell(blockIndex, row, col - 1);
+      } else if (row > 0) {
+        this.setActiveTableCell(blockIndex, row - 1, colCount - 1);
+      }
+      // At first cell, do nothing
+    }
+  }
+
+  /** Add a row to a table */
+  addTableRow(blockIndex: number): void {
+    const block = this.doc.blocks[blockIndex];
+    if (!block || block.type !== 'table' || !block.tableData) return;
+    const colCount = block.tableData[0]?.length || 2;
+
+    this.pushHistory();
+    const newTableData = block.tableData.map((r) =>
+      r.map((c) => ({ runs: c.runs.map((run) => ({ text: run.text, style: { ...run.style } })) }))
+    );
+    const newRow: TableCell[] = [];
+    for (let c = 0; c < colCount; c++) {
+      newRow.push({ runs: [{ text: '', style: {} }] });
+    }
+    newTableData.push(newRow);
+
+    const op: Operation = {
+      type: 'set_table_data',
+      blockIndex,
+      tableData: newTableData,
+    };
+    this.applyLocal(op);
+    this.render();
+  }
+
+  /** Add a column to a table */
+  addTableColumn(blockIndex: number): void {
+    const block = this.doc.blocks[blockIndex];
+    if (!block || block.type !== 'table' || !block.tableData) return;
+
+    this.pushHistory();
+    const newTableData = block.tableData.map((r) => {
+      const newRow = r.map((c) => ({ runs: c.runs.map((run) => ({ text: run.text, style: { ...run.style } })) }));
+      newRow.push({ runs: [{ text: '', style: {} }] });
+      return newRow;
+    });
+
+    const op: Operation = {
+      type: 'set_table_data',
+      blockIndex,
+      tableData: newTableData,
+    };
+    this.applyLocal(op);
+    this.render();
+  }
+
+  /** Remove a row from a table (minimum 1 row) */
+  removeTableRow(blockIndex: number, rowIndex: number): void {
+    const block = this.doc.blocks[blockIndex];
+    if (!block || block.type !== 'table' || !block.tableData) return;
+    if (block.tableData.length <= 1) return;
+
+    this.pushHistory();
+    const newTableData = block.tableData
+      .filter((_, i) => i !== rowIndex)
+      .map((r) => r.map((c) => ({ runs: c.runs.map((run) => ({ text: run.text, style: { ...run.style } })) })));
+
+    const op: Operation = {
+      type: 'set_table_data',
+      blockIndex,
+      tableData: newTableData,
+    };
+    this.applyLocal(op);
+    if (this.activeTableCell && this.activeTableCell.blockIndex === blockIndex) {
+      if (this.activeTableCell.row >= newTableData.length) {
+        this.activeTableCell.row = newTableData.length - 1;
+      }
+    }
+    this.render();
+  }
+
+  /** Remove a column from a table (minimum 1 column) */
+  removeTableColumn(blockIndex: number, colIndex: number): void {
+    const block = this.doc.blocks[blockIndex];
+    if (!block || block.type !== 'table' || !block.tableData) return;
+    if (block.tableData[0].length <= 1) return;
+
+    this.pushHistory();
+    const newTableData = block.tableData.map((r) =>
+      r.filter((_, i) => i !== colIndex)
+        .map((c) => ({ runs: c.runs.map((run) => ({ text: run.text, style: { ...run.style } })) }))
+    );
+
+    const op: Operation = {
+      type: 'set_table_data',
+      blockIndex,
+      tableData: newTableData,
+    };
+    this.applyLocal(op);
+    if (this.activeTableCell && this.activeTableCell.blockIndex === blockIndex) {
+      if (this.activeTableCell.col >= newTableData[0].length) {
+        this.activeTableCell.col = newTableData[0].length - 1;
+      }
+    }
+    this.render();
   }
 
   /** Change the alignment of the block at the cursor */

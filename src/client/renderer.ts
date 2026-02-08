@@ -1,4 +1,4 @@
-import type { Document, Block, TextRun, BlockType } from '../shared/model.js';
+import type { Document, Block, TextRun, BlockType, TableCell } from '../shared/model.js';
 import { blockTextLength, getIndentLevel } from '../shared/model.js';
 
 /** Map from BlockType to the HTML tag used to render it */
@@ -13,6 +13,7 @@ const BLOCK_TAG_MAP: Record<BlockType, string> = {
   'code-block': 'pre',
   'horizontal-rule': 'hr',
   'image': 'figure',
+  'table': 'table',
 };
 
 /** Render a single text run to a DOM element */
@@ -74,6 +75,11 @@ function renderBlock(block: Block): HTMLElement {
     return el;
   }
 
+  // Table blocks render as <table> with rows and cells
+  if (block.type === 'table') {
+    return renderTableBlock(block);
+  }
+
   const tag = BLOCK_TAG_MAP[block.type] || 'p';
   const el = document.createElement(tag);
 
@@ -121,6 +127,67 @@ function renderBlock(block: Block): HTMLElement {
   }
 
   return el;
+}
+
+/** Render a table block as an HTML table */
+function renderTableBlock(block: Block): HTMLElement {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'table-block';
+  wrapper.dataset.blockId = block.id;
+
+  const indent = getIndentLevel(block);
+  if (indent > 0) {
+    wrapper.dataset.indent = String(indent);
+  }
+
+  const table = document.createElement('table');
+  table.className = 'altdocs-table';
+  const tbody = document.createElement('tbody');
+
+  const rows = block.tableData || [];
+  for (let r = 0; r < rows.length; r++) {
+    const tr = document.createElement('tr');
+    for (let c = 0; c < rows[r].length; c++) {
+      const td = document.createElement('td');
+      td.dataset.row = String(r);
+      td.dataset.col = String(c);
+      renderCellContent(td, rows[r][c]);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+
+  // Add row/column control buttons
+  const addRowBtn = document.createElement('button');
+  addRowBtn.type = 'button';
+  addRowBtn.className = 'table-add-row';
+  addRowBtn.textContent = '+ Row';
+  addRowBtn.dataset.action = 'add-row';
+  wrapper.appendChild(addRowBtn);
+
+  const addColBtn = document.createElement('button');
+  addColBtn.type = 'button';
+  addColBtn.className = 'table-add-col';
+  addColBtn.textContent = '+ Col';
+  addColBtn.dataset.action = 'add-col';
+  wrapper.appendChild(addColBtn);
+
+  return wrapper;
+}
+
+/** Render cell content (TextRun[]) into a td element */
+function renderCellContent(td: HTMLElement, cell: TableCell): void {
+  const totalLen = cell.runs.reduce((sum, r) => sum + r.text.length, 0);
+  if (totalLen === 0) {
+    td.appendChild(document.createElement('br'));
+  } else {
+    for (const run of cell.runs) {
+      td.appendChild(renderRun(run));
+    }
+  }
 }
 
 /**

@@ -31,6 +31,7 @@ import type {
   SetImageOp,
   SetLineSpacingOp,
   DeleteBlockOp,
+  SetTableDataOp,
 } from './model.js';
 
 // ============================================================
@@ -254,6 +255,8 @@ function transformWithPriority(
       return transformSetLineSpacing(op, other, hasPriority);
     case 'delete_block':
       return transformDeleteBlock(op, other);
+    case 'set_table_data':
+      return transformSetTableData(op, other, hasPriority);
   }
 }
 
@@ -834,6 +837,19 @@ function transformDeleteBlock(op: DeleteBlockOp, other: Operation): DeleteBlockO
     default:
       return { ...op };
   }
+}
+
+// ============================================================
+// Transform set_table_data against other operations
+// ============================================================
+
+function transformSetTableData(op: SetTableDataOp, other: Operation, hasPriority: boolean): SetTableDataOp {
+  // Concurrent set_table_data on same block: priority op wins
+  if (other.type === 'set_table_data' && other.blockIndex === op.blockIndex && !hasPriority) {
+    return { ...op, tableData: other.tableData };
+  }
+  const newIndex = transformBlockIndex(op.blockIndex, other);
+  return { ...op, blockIndex: newIndex };
 }
 
 // ============================================================

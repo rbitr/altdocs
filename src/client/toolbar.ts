@@ -144,6 +144,10 @@ export class Toolbar {
     this.addButton(insertGroup, 'insert-image', '\ud83d\uddbc', 'Insert Image', () => {
       this.editor.insertImage();
     });
+    this.addButton(insertGroup, 'insert-table', '\u25a6', 'Insert Table', () => {
+      this.editor.insertTable();
+      this.editor.focus();
+    });
 
     this.addSeparator();
 
