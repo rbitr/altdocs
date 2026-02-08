@@ -6,11 +6,13 @@ import { fetchDocumentList, fetchDocument, saveDocument, deleteDocumentById, dup
 import type { UserInfo } from './api-client.js';
 import { toast } from './toast.js';
 import { CollaborationClient } from './collaboration.js';
+import { RemoteCursorRenderer } from './remote-cursors.js';
 import type { Block } from '../shared/model.js';
 
 let editor: Editor | null = null;
 let toolbar: Toolbar | null = null;
 let collab: CollaborationClient | null = null;
+let remoteCursors: RemoteCursorRenderer | null = null;
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSavedJSON = '';
 let currentUser: UserInfo | null = null;
@@ -368,6 +370,13 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   editor = new Editor(editorEl, doc);
   toolbar = new Toolbar(toolbarEl, editor);
   editor.onShortcutsToggle(() => toolbar!.toggleShortcutsPanel());
+
+  // Create remote cursor renderer (needs a wrapper div for relative positioning)
+  const editorWrapper = document.createElement('div');
+  editorWrapper.className = 'editor-wrapper';
+  editorEl.parentElement!.insertBefore(editorWrapper, editorEl);
+  editorWrapper.appendChild(editorEl);
+  remoteCursors = new RemoteCursorRenderer(editorEl);
   toolbar.setVersionRestoreHandler((record) => {
     if (!editor) return;
     const blocks: Block[] = JSON.parse(record.content);
@@ -379,9 +388,12 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   });
   lastSavedJSON = JSON.stringify(doc.blocks);
 
-  // Auto-save on editor changes
+  // Auto-save on editor changes + refresh remote cursors
   editor.onUpdate(() => {
     scheduleAutoSave();
+    if (remoteCursors && editor) {
+      remoteCursors.refresh(editor.getDocument());
+    }
   });
 
   // Initial save to create on server if new
@@ -403,6 +415,9 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
     },
     onRemoteUsersChange: (users) => {
       updateCollaboratorsList(users);
+      if (remoteCursors && editor) {
+        remoteCursors.update(users, editor.getDocument());
+      }
     },
   });
   collab.connect();
@@ -435,6 +450,10 @@ async function route(): Promise<void> {
     autoSaveTimer = null;
   }
   // Disconnect collaboration and flush pending save before navigating away
+  if (remoteCursors) {
+    remoteCursors.destroy();
+    remoteCursors = null;
+  }
   if (collab) {
     collab.disconnect();
     collab = null;

@@ -121,4 +121,73 @@ test.describe('Real-Time Collaboration', () => {
       await context2.close();
     }
   });
+
+  test('shows remote cursor when another user is editing', async ({ browser }) => {
+    const context1 = await browser.newContext();
+    const context2 = await browser.newContext();
+    const page1 = await context1.newPage();
+    const page2 = await context2.newPage();
+
+    try {
+      // Both pages open the same document
+      await page1.goto(`/#/doc/${uniqueDocId}`);
+      await page2.goto(`/#/doc/${uniqueDocId}`);
+
+      // Wait for both editors and collaboration to connect
+      await page1.waitForSelector('.collab-status-connected', { timeout: 10000 });
+      await page2.waitForSelector('.collab-status-connected', { timeout: 10000 });
+
+      // Page 2: click into the editor to send a cursor position
+      const editor2 = page2.locator('.altdocs-editor');
+      await editor2.click();
+      await page2.waitForTimeout(200);
+
+      // Page 1 should see a remote cursor overlay
+      const remoteCaret = page1.locator('.remote-cursor-caret');
+      await expect(remoteCaret.first()).toBeVisible({ timeout: 5000 });
+
+      // Remote cursor label should show the user's display name
+      const remoteLabel = page1.locator('.remote-cursor-label');
+      await expect(remoteLabel.first()).toBeVisible({ timeout: 5000 });
+      const labelText = await remoteLabel.first().textContent();
+      expect(labelText).toBeTruthy();
+      expect(labelText!.length).toBeGreaterThan(0);
+    } finally {
+      await context1.close();
+      await context2.close();
+    }
+  });
+
+  test('remote cursor disappears when user leaves', async ({ browser }) => {
+    const context1 = await browser.newContext();
+    const context2 = await browser.newContext();
+    const page1 = await context1.newPage();
+    const page2 = await context2.newPage();
+
+    try {
+      // Both pages open the same document
+      await page1.goto(`/#/doc/${uniqueDocId}`);
+      await page2.goto(`/#/doc/${uniqueDocId}`);
+
+      await page1.waitForSelector('.collab-status-connected', { timeout: 10000 });
+      await page2.waitForSelector('.collab-status-connected', { timeout: 10000 });
+
+      // Page 2: click to send cursor position
+      await page2.locator('.altdocs-editor').click();
+      await page2.waitForTimeout(200);
+
+      // Verify remote cursor appears on page 1
+      await expect(page1.locator('.remote-cursor-caret').first()).toBeVisible({ timeout: 5000 });
+
+      // Page 2 navigates away — should trigger disconnect
+      await page2.goto('/#/');
+      await page2.waitForTimeout(500);
+
+      // Page 1 should no longer show the remote cursor
+      await expect(page1.locator('.remote-cursor-caret')).toHaveCount(0, { timeout: 5000 });
+    } finally {
+      await context1.close();
+      await context2.close();
+    }
+  });
 });
