@@ -11,6 +11,7 @@ import { toast } from './toast.js';
 import { CollaborationClient } from './collaboration.js';
 import { RemoteCursorRenderer } from './remote-cursors.js';
 import { SharePanel } from './share-panel.js';
+import { FindReplaceBar } from './find-replace.js';
 import type { Block } from '../shared/model.js';
 
 let editor: Editor | null = null;
@@ -18,6 +19,7 @@ let toolbar: Toolbar | null = null;
 let collab: CollaborationClient | null = null;
 let remoteCursors: RemoteCursorRenderer | null = null;
 let sharePanel: SharePanel | null = null;
+let findReplaceBar: FindReplaceBar | null = null;
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSavedJSON = '';
 let currentUser: UserInfo | null = null;
@@ -431,6 +433,14 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   editorWrapper.className = 'editor-wrapper';
   editorEl.parentElement!.insertBefore(editorWrapper, editorEl);
   editorWrapper.appendChild(editorEl);
+
+  // Create find/replace bar
+  findReplaceBar = new FindReplaceBar(editorEl, editor);
+  editor.onFindReplace((withReplace) => {
+    if (findReplaceBar) {
+      findReplaceBar.show(withReplace);
+    }
+  });
   remoteCursors = new RemoteCursorRenderer(editorEl);
   toolbar.setVersionRestoreHandler((record) => {
     if (!editor) return;
@@ -450,6 +460,9 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
     }
     if (remoteCursors && editor) {
       remoteCursors.refresh(editor.getDocument());
+    }
+    if (findReplaceBar) {
+      findReplaceBar.refresh();
     }
   });
 
@@ -539,6 +552,10 @@ async function route(): Promise<void> {
     autoSaveTimer = null;
   }
   // Disconnect collaboration and flush pending save before navigating away
+  if (findReplaceBar) {
+    findReplaceBar.destroy();
+    findReplaceBar = null;
+  }
   if (sharePanel) {
     sharePanel.close();
     sharePanel = null;

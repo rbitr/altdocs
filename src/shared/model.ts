@@ -196,6 +196,29 @@ export function blockToPlainText(block: Block): string {
   return block.runs.map((r) => r.text).join('');
 }
 
+/** Find the offset of the previous word boundary (for Ctrl+Backspace) */
+export function findWordBoundaryLeft(text: string, offset: number): number {
+  if (offset <= 0) return 0;
+  let i = offset - 1;
+  // Skip whitespace/punctuation backwards
+  while (i > 0 && /[\s\W]/.test(text[i])) i--;
+  // Skip word characters backwards
+  while (i > 0 && /\w/.test(text[i - 1])) i--;
+  return i;
+}
+
+/** Find the offset of the next word boundary (for Ctrl+Delete) */
+export function findWordBoundaryRight(text: string, offset: number): number {
+  const len = text.length;
+  if (offset >= len) return len;
+  let i = offset;
+  // Skip word characters forwards
+  while (i < len && /\w/.test(text[i])) i++;
+  // Skip whitespace/punctuation forwards
+  while (i < len && /[\s\W]/.test(text[i])) i++;
+  return i;
+}
+
 /** Check if two TextStyle objects are equal */
 export function stylesEqual(a: TextStyle, b: TextStyle): boolean {
   return (

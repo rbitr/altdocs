@@ -29,8 +29,12 @@ export const SHORTCUT_DATA: ShortcutCategory[] = [
       { keys: 'Ctrl+C', description: 'Copy' },
       { keys: 'Ctrl+X', description: 'Cut' },
       { keys: 'Ctrl+V', description: 'Paste' },
+      { keys: 'Ctrl+Backspace', description: 'Delete previous word' },
+      { keys: 'Ctrl+Delete', description: 'Delete next word' },
       { keys: 'Tab', description: 'Indent block' },
       { keys: 'Shift+Tab', description: 'Outdent block' },
+      { keys: 'Ctrl+F', description: 'Find' },
+      { keys: 'Ctrl+H', description: 'Find & Replace' },
     ],
   },
   {

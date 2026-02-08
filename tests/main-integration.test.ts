@@ -23,6 +23,7 @@ const mockEditor = {
   onUpdate: vi.fn(),
   onOperation: vi.fn(),
   onShortcutsToggle: vi.fn(),
+  onFindReplace: vi.fn(),
   setDocument: vi.fn(),
   doc: { id: 'doc1', title: 'Test', blocks: [] } as any,
 };
@@ -35,6 +36,7 @@ const mockToolbar = {
 const mockCollab = { connect: vi.fn(), disconnect: vi.fn() };
 const mockRemoteCursors = { destroy: vi.fn(), update: vi.fn(), refresh: vi.fn() };
 const mockSharePanel = { open: vi.fn(), close: vi.fn(), visible: false };
+const mockFindReplaceBar = { show: vi.fn(), hide: vi.fn(), isVisible: vi.fn(() => false), destroy: vi.fn(), refresh: vi.fn() };
 
 // ── Module mocks ──
 
@@ -62,6 +64,7 @@ vi.mock('../src/client/toast.js', () => ({ toast: vi.fn() }));
 vi.mock('../src/client/collaboration.js', () => ({ CollaborationClient: vi.fn(() => mockCollab) }));
 vi.mock('../src/client/remote-cursors.js', () => ({ RemoteCursorRenderer: vi.fn(() => mockRemoteCursors) }));
 vi.mock('../src/client/share-panel.js', () => ({ SharePanel: vi.fn(() => mockSharePanel) }));
+vi.mock('../src/client/find-replace.js', () => ({ FindReplaceBar: vi.fn(() => mockFindReplaceBar) }));
 
 // ── Imports ──
 

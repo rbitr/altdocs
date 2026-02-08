@@ -1,5 +1,5 @@
 import type { Document, Operation, Position, TextStyle, BlockType, Alignment, LineSpacing, TableCell, SetTableDataOp } from '../shared/model.js';
-import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange, generateBlockId, getIndentLevel, MAX_INDENT_LEVEL, createTableData, normalizeRuns } from '../shared/model.js';
+import { applyOperation, blockTextLength, blockToPlainText, createEmptyDocument, getTextInRange, generateBlockId, getIndentLevel, MAX_INDENT_LEVEL, createTableData, normalizeRuns, findWordBoundaryLeft, findWordBoundaryRight } from '../shared/model.js';
 import { uploadImage } from './api-client.js';
 import type { CursorState } from '../shared/cursor.js';
 import {
@@ -34,6 +34,7 @@ export class Editor {
   private onUpdateCallbacks: Array<() => void> = [];
   private onOperationCallbacks: Array<(op: Operation) => void> = [];
   private onShortcutsPanelToggle: (() => void) | null = null;
+  private onFindReplaceToggle: ((withReplace: boolean) => void) | null = null;
   /** Currently focused table cell [row, col] or null if not in a table */
   private activeTableCell: { blockIndex: number; row: number; col: number } | null = null;
 
@@ -265,6 +266,38 @@ export class Editor {
       e.preventDefault();
       this.cursor = moveToDocEnd(this.doc, shift, this.cursor);
       this.updateCursor();
+      return;
+    }
+
+    // Ctrl+Backspace: delete previous word
+    if (ctrl && e.key === 'Backspace') {
+      e.preventDefault();
+      this.handleCtrlBackspace();
+      return;
+    }
+
+    // Ctrl+Delete: delete next word
+    if (ctrl && e.key === 'Delete') {
+      e.preventDefault();
+      this.handleCtrlDelete();
+      return;
+    }
+
+    // Ctrl+F: open find bar (notify via callback)
+    if (ctrl && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      if (this.onFindReplaceToggle) {
+        this.onFindReplaceToggle(false);
+      }
+      return;
+    }
+
+    // Ctrl+H: open find & replace bar
+    if (ctrl && e.key.toLowerCase() === 'h') {
+      e.preventDefault();
+      if (this.onFindReplaceToggle) {
+        this.onFindReplaceToggle(true);
+      }
       return;
     }
 
@@ -624,6 +657,93 @@ export class Editor {
       };
       this.applyLocal(op);
       // Cursor stays in place
+    }
+
+    this.render();
+  }
+
+  private handleCtrlBackspace(): void {
+    this.pushHistory();
+
+    if (!isCollapsed(this.cursor)) {
+      this.deleteSelection();
+      this.render();
+      return;
+    }
+
+    const pos = this.cursor.focus;
+    const block = this.doc.blocks[pos.blockIndex];
+    if (!block || isVoidBlock(block.type)) {
+      this.handleBackspace();
+      return;
+    }
+
+    if (pos.offset > 0) {
+      const text = blockToPlainText(block);
+      const wordStart = findWordBoundaryLeft(text, pos.offset);
+      const op: Operation = {
+        type: 'delete_text',
+        range: {
+          start: { blockIndex: pos.blockIndex, offset: wordStart },
+          end: { blockIndex: pos.blockIndex, offset: pos.offset },
+        },
+      };
+      this.applyLocal(op);
+      this.cursor = collapsedCursor({
+        blockIndex: pos.blockIndex,
+        offset: wordStart,
+      });
+    } else if (pos.blockIndex > 0) {
+      // At start of block — merge with previous (same as regular backspace)
+      const prevBlock = this.doc.blocks[pos.blockIndex - 1];
+      if (isVoidBlock(prevBlock.type)) {
+        const deleteOp: Operation = { type: 'delete_block', blockIndex: pos.blockIndex - 1 };
+        this.applyLocal(deleteOp);
+        this.cursor = collapsedCursor({ blockIndex: pos.blockIndex - 1, offset: 0 });
+      } else {
+        const prevBlockLen = blockTextLength(prevBlock);
+        const op: Operation = { type: 'merge_block', blockIndex: pos.blockIndex };
+        this.applyLocal(op);
+        this.cursor = collapsedCursor({ blockIndex: pos.blockIndex - 1, offset: prevBlockLen });
+      }
+    }
+
+    this.render();
+  }
+
+  private handleCtrlDelete(): void {
+    this.pushHistory();
+
+    if (!isCollapsed(this.cursor)) {
+      this.deleteSelection();
+      this.render();
+      return;
+    }
+
+    const pos = this.cursor.focus;
+    const block = this.doc.blocks[pos.blockIndex];
+    if (!block || isVoidBlock(block.type)) {
+      this.handleDelete();
+      return;
+    }
+
+    const blockLen = blockTextLength(block);
+    if (pos.offset < blockLen) {
+      const text = blockToPlainText(block);
+      const wordEnd = findWordBoundaryRight(text, pos.offset);
+      const op: Operation = {
+        type: 'delete_text',
+        range: {
+          start: { blockIndex: pos.blockIndex, offset: pos.offset },
+          end: { blockIndex: pos.blockIndex, offset: wordEnd },
+        },
+      };
+      this.applyLocal(op);
+      // Cursor stays in place
+    } else if (pos.blockIndex < this.doc.blocks.length - 1) {
+      // At end of block — merge next block (same as regular delete)
+      const op: Operation = { type: 'merge_block', blockIndex: pos.blockIndex + 1 };
+      this.applyLocal(op);
     }
 
     this.render();
@@ -1343,6 +1463,11 @@ export class Editor {
   /** Register a callback for when the shortcuts panel toggle is requested (Ctrl+/) */
   onShortcutsToggle(callback: () => void): void {
     this.onShortcutsPanelToggle = callback;
+  }
+
+  /** Register a callback for when find/replace is toggled (Ctrl+F / Ctrl+H) */
+  onFindReplace(callback: (withReplace: boolean) => void): void {
+    this.onFindReplaceToggle = callback;
   }
 
   /** Set the document and re-render */

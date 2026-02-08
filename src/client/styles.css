@@ -1531,6 +1531,81 @@ body {
   color: #333;
 }
 
+/* Find & Replace Bar */
+.find-replace-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+  z-index: 50;
+}
+
+.find-replace-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.find-input {
+  flex: 1;
+  min-width: 150px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.find-input:focus {
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+}
+
+.find-match-count {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  min-width: 70px;
+  text-align: center;
+}
+
+.find-btn {
+  padding: 4px 8px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+}
+
+.find-btn:hover {
+  background: #e8e8e8;
+}
+
+.find-close-btn {
+  font-size: 16px;
+  padding: 2px 6px;
+  margin-left: 4px;
+}
+
+/* Find highlights (overlay on editor content) */
+.find-highlight {
+  background: rgba(255, 235, 59, 0.4);
+  border-radius: 2px;
+}
+
+.find-highlight-active {
+  background: rgba(255, 152, 0, 0.5);
+  border-radius: 2px;
+  outline: 2px solid #ff9800;
+}
+
 /* Indented table blocks */
 .table-block[data-indent="1"] { margin-left: 1.5em; }
 .table-block[data-indent="2"] { margin-left: 3em; }

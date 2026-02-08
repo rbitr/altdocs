@@ -13,6 +13,8 @@ import {
   createBlock,
   resetBlockIdCounter,
   getTextInRange,
+  findWordBoundaryLeft,
+  findWordBoundaryRight,
 } from '../src/shared/model.js';
 
 // ============================================================
@@ -1512,5 +1514,77 @@ describe('delete_block', () => {
       blockIndex: -1,
     });
     expect(result.blocks).toHaveLength(2);
+  });
+});
+
+// ============================================================
+// findWordBoundaryLeft / findWordBoundaryRight
+// ============================================================
+
+describe('findWordBoundaryLeft', () => {
+  it('finds boundary before a word', () => {
+    expect(findWordBoundaryLeft('hello world', 11)).toBe(6);
+  });
+
+  it('finds boundary at start of text', () => {
+    expect(findWordBoundaryLeft('hello', 5)).toBe(0);
+  });
+
+  it('returns 0 at offset 0', () => {
+    expect(findWordBoundaryLeft('hello', 0)).toBe(0);
+  });
+
+  it('skips whitespace then deletes word', () => {
+    expect(findWordBoundaryLeft('hello   world', 8)).toBe(0);
+  });
+
+  it('handles punctuation as word boundary', () => {
+    expect(findWordBoundaryLeft('hello.world', 11)).toBe(6);
+  });
+
+  it('deletes through multiple spaces', () => {
+    expect(findWordBoundaryLeft('one  two  three', 10)).toBe(5);
+  });
+
+  it('handles cursor in middle of word', () => {
+    expect(findWordBoundaryLeft('hello world', 8)).toBe(6);
+  });
+
+  it('handles empty string', () => {
+    expect(findWordBoundaryLeft('', 0)).toBe(0);
+  });
+});
+
+describe('findWordBoundaryRight', () => {
+  it('finds boundary after a word', () => {
+    expect(findWordBoundaryRight('hello world', 0)).toBe(6);
+  });
+
+  it('finds boundary at end of text', () => {
+    expect(findWordBoundaryRight('hello', 0)).toBe(5);
+  });
+
+  it('returns length at end', () => {
+    expect(findWordBoundaryRight('hello', 5)).toBe(5);
+  });
+
+  it('skips word then whitespace', () => {
+    expect(findWordBoundaryRight('hello   world', 0)).toBe(8);
+  });
+
+  it('handles punctuation as word boundary', () => {
+    expect(findWordBoundaryRight('hello.world', 0)).toBe(6);
+  });
+
+  it('deletes through spaces after word', () => {
+    expect(findWordBoundaryRight('one  two  three', 5)).toBe(10);
+  });
+
+  it('handles cursor in middle of word', () => {
+    expect(findWordBoundaryRight('hello world', 3)).toBe(6);
+  });
+
+  it('handles empty string', () => {
+    expect(findWordBoundaryRight('', 0)).toBe(0);
   });
 });
