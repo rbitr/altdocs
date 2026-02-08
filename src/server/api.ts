@@ -5,6 +5,7 @@ import {
   createShare, getShareByToken, listShares, deleteShare, getShare,
 } from './db.js';
 import type { ShareRecord } from './db.js';
+import { validateContent } from '../shared/validation.js';
 
 const router = Router();
 
@@ -86,14 +87,28 @@ router.post('/api/documents', (req, res) => {
     res.status(409).json({ error: 'Document already exists' });
     return;
   }
+  const contentStr = content || '[]';
+  const contentError = validateContent(contentStr);
+  if (contentError) {
+    res.status(400).json({ error: contentError });
+    return;
+  }
   const ownerId = req.user?.user_id;
-  const record = createDocument(id, title || 'Untitled', content || '[]', ownerId);
+  const record = createDocument(id, title || 'Untitled', contentStr, ownerId);
   res.status(201).json(record);
 });
 
 // Update a document
 router.put('/api/documents/:id', (req, res) => {
   const { title, content } = req.body;
+  // Validate content if provided
+  if (content !== undefined) {
+    const contentError = validateContent(content);
+    if (contentError) {
+      res.status(400).json({ error: contentError });
+      return;
+    }
+  }
   const existing = getDocument(req.params.id);
   if (!existing) {
     // Auto-create on PUT if it doesn't exist (upsert)

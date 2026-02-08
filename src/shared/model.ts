@@ -488,7 +488,7 @@ function applySplitBlock(doc: Document, op: SplitBlockOp): Document {
   // Create a new block with content after the split
   const newBlock: Block = {
     id: generateBlockId(),
-    type: block.type === 'paragraph' ? 'paragraph' : 'paragraph',
+    type: 'paragraph',
     alignment: block.alignment,
     runs: normalizeRuns(afterRuns),
   };
@@ -535,13 +535,14 @@ function applyChangeBlockAlignment(doc: Document, op: ChangeBlockAlignmentOp): D
 }
 
 function applyInsertBlock(doc: Document, op: InsertBlockOp): Document {
+  const insertAt = Math.max(0, Math.min(op.afterBlockIndex + 1, doc.blocks.length));
   const newBlock: Block = {
     id: generateBlockId(),
     type: op.blockType,
     alignment: 'left',
     runs: [{ text: '', style: {} }],
   };
-  doc.blocks.splice(op.afterBlockIndex + 1, 0, newBlock);
+  doc.blocks.splice(insertAt, 0, newBlock);
   return doc;
 }
 

@@ -430,7 +430,7 @@ describe('Sharing API', () => {
       await authFetch(`${baseUrl}/api/documents/doc1`, owner.token, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'V1', content: '[1]' }),
+        body: JSON.stringify({ title: 'V1', content: JSON.stringify([{ id: 'b1', type: 'paragraph', alignment: 'left', runs: [{ text: 'v1', style: {} }] }]) }),
       });
 
       const share = createShare('doc1', 'view', owner.userId);
@@ -454,7 +454,7 @@ describe('Sharing API', () => {
       await authFetch(`${baseUrl}/api/documents/doc1`, owner.token, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'V1', content: '[1]' }),
+        body: JSON.stringify({ title: 'V1', content: JSON.stringify([{ id: 'b1', type: 'paragraph', alignment: 'left', runs: [{ text: 'v1', style: {} }] }]) }),
       });
 
       const share = createShare('doc1', 'view', owner.userId);

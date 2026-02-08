@@ -1301,6 +1301,30 @@ describe('insert_block operation', () => {
     });
     expect(doc.blocks).toHaveLength(1);
   });
+
+  it('clamps afterBlockIndex that exceeds document length', () => {
+    const doc = makeDoc([makeBlock('only')]);
+    const result = applyOperation(doc, {
+      type: 'insert_block',
+      afterBlockIndex: 100,
+      blockType: 'paragraph',
+    });
+    expect(result.blocks).toHaveLength(2);
+    expect(getBlockText(result, 0)).toBe('only');
+    expect(result.blocks[1].type).toBe('paragraph');
+  });
+
+  it('clamps negative afterBlockIndex to insert at beginning', () => {
+    const doc = makeDoc([makeBlock('existing')]);
+    const result = applyOperation(doc, {
+      type: 'insert_block',
+      afterBlockIndex: -5,
+      blockType: 'paragraph',
+    });
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[0].type).toBe('paragraph');
+    expect(getBlockText(result, 1)).toBe('existing');
+  });
 });
 
 describe('change_block_type with new types', () => {

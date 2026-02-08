@@ -4,6 +4,11 @@ import { apiRouter } from '../src/server/api.js';
 import { resetStore, useMemoryDb } from '../src/server/db.js';
 import type { Server } from 'http';
 
+/** Create valid Block[] content JSON for testing */
+function validContent(text: string = ''): string {
+  return JSON.stringify([{ id: 'b1', type: 'paragraph', alignment: 'left', runs: [{ text, style: {} }] }]);
+}
+
 let server: Server;
 let baseUrl: string;
 
@@ -62,6 +67,37 @@ describe('API Endpoints', () => {
       expect(res.status).toBe(400);
     });
 
+    it('rejects invalid content JSON on create', async () => {
+      const res = await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'bad', title: 'Bad', content: 'not json' }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain('not valid JSON');
+    });
+
+    it('rejects content that is not an array', async () => {
+      const res = await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'bad', title: 'Bad', content: '{}' }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain('must be a JSON array');
+    });
+
+    it('rejects content with invalid block structure', async () => {
+      const res = await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'bad', title: 'Bad', content: '[{"invalid":true}]' }),
+      });
+      expect(res.status).toBe(400);
+    });
+
     it('rejects duplicate id', async () => {
       await fetch(`${baseUrl}/api/documents`, {
         method: 'POST',
@@ -82,7 +118,7 @@ describe('API Endpoints', () => {
       await fetch(`${baseUrl}/api/documents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 'doc1', title: 'Test', content: '[{"block":1}]' }),
+        body: JSON.stringify({ id: 'doc1', title: 'Test', content: validContent('hello') }),
       });
 
       const res = await fetch(`${baseUrl}/api/documents/doc1`);
@@ -90,7 +126,7 @@ describe('API Endpoints', () => {
       const body = await res.json();
       expect(body.id).toBe('doc1');
       expect(body.title).toBe('Test');
-      expect(body.content).toBe('[{"block":1}]');
+      expect(body.content).toBe(validContent('hello'));
     });
 
     it('returns 404 for non-existent document', async () => {
@@ -110,12 +146,27 @@ describe('API Endpoints', () => {
       const res = await fetch(`${baseUrl}/api/documents/doc1`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Updated', content: '[{"new":true}]' }),
+        body: JSON.stringify({ title: 'Updated', content: validContent('new') }),
       });
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.title).toBe('Updated');
-      expect(body.content).toBe('[{"new":true}]');
+      expect(body.content).toBe(validContent('new'));
+    });
+
+    it('rejects invalid content JSON on update', async () => {
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'doc1', title: 'Original', content: '[]' }),
+      });
+
+      const res = await fetch(`${baseUrl}/api/documents/doc1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'invalid' }),
+      });
+      expect(res.status).toBe(400);
     });
 
     it('creates document if it does not exist (upsert)', async () => {
@@ -140,11 +191,11 @@ describe('API Endpoints', () => {
       const res = await fetch(`${baseUrl}/api/documents/doc1`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: '[{"updated":true}]' }),
+        body: JSON.stringify({ content: validContent('updated') }),
       });
       const body = await res.json();
       expect(body.title).toBe('Keep This');
-      expect(body.content).toBe('[{"updated":true}]');
+      expect(body.content).toBe(validContent('updated'));
     });
   });
 
@@ -205,12 +256,12 @@ describe('API Endpoints', () => {
       await fetch(`${baseUrl}/api/documents/doc1`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Update 1', content: '[1]' }),
+        body: JSON.stringify({ title: 'Update 1', content: validContent('v1') }),
       });
       await fetch(`${baseUrl}/api/documents/doc1`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Update 2', content: '[2]' }),
+        body: JSON.stringify({ title: 'Update 2', content: validContent('v2') }),
       });
 
       const res = await fetch(`${baseUrl}/api/documents/doc1/versions`);
@@ -239,7 +290,7 @@ describe('API Endpoints', () => {
       await fetch(`${baseUrl}/api/documents/doc1`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'V1 Title', content: '[1]' }),
+        body: JSON.stringify({ title: 'V1 Title', content: validContent('v1') }),
       });
 
       const res = await fetch(`${baseUrl}/api/documents/doc1/versions/1`);
@@ -247,7 +298,7 @@ describe('API Endpoints', () => {
       const version = await res.json();
       expect(version.version_number).toBe(1);
       expect(version.title).toBe('V1 Title');
-      expect(version.content).toBe('[1]');
+      expect(version.content).toBe(validContent('v1'));
     });
 
     it('returns 404 for non-existent version', async () => {
@@ -276,17 +327,17 @@ describe('API Endpoints', () => {
       await fetch(`${baseUrl}/api/documents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 'doc1', title: 'Original', content: '[0]' }),
+        body: JSON.stringify({ id: 'doc1', title: 'Original', content: validContent('v0') }),
       });
       await fetch(`${baseUrl}/api/documents/doc1`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'V1 Title', content: '[1]' }),
+        body: JSON.stringify({ title: 'V1 Title', content: validContent('v1') }),
       });
       await fetch(`${baseUrl}/api/documents/doc1`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'V2 Title', content: '[2]' }),
+        body: JSON.stringify({ title: 'V2 Title', content: validContent('v2') }),
       });
 
       // Restore version 1
@@ -296,13 +347,13 @@ describe('API Endpoints', () => {
       expect(res.status).toBe(200);
       const restored = await res.json();
       expect(restored.title).toBe('V1 Title');
-      expect(restored.content).toBe('[1]');
+      expect(restored.content).toBe(validContent('v1'));
 
       // Verify the document now has the restored content
       const getRes = await fetch(`${baseUrl}/api/documents/doc1`);
       const doc = await getRes.json();
       expect(doc.title).toBe('V1 Title');
-      expect(doc.content).toBe('[1]');
+      expect(doc.content).toBe(validContent('v1'));
     });
 
     it('returns 404 for non-existent version', async () => {
