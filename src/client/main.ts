@@ -4,6 +4,7 @@ import { createEmptyDocument } from '../shared/model.js';
 import type { Document } from '../shared/model.js';
 import { fetchDocumentList, fetchDocument, saveDocument, deleteDocumentById, duplicateDocument } from './api-client.js';
 import { toast } from './toast.js';
+import type { Block } from '../shared/model.js';
 
 let editor: Editor | null = null;
 let toolbar: Toolbar | null = null;
@@ -274,6 +275,15 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
   editor = new Editor(editorEl, doc);
   toolbar = new Toolbar(toolbarEl, editor);
   editor.onShortcutsToggle(() => toolbar!.toggleShortcutsPanel());
+  toolbar.setVersionRestoreHandler((record) => {
+    if (!editor) return;
+    const blocks: Block[] = JSON.parse(record.content);
+    const restoredDoc = { id: docId, title: record.title, blocks };
+    editor.setDocument(restoredDoc);
+    titleInput.value = record.title === 'Untitled' ? '' : record.title;
+    lastSavedJSON = record.content;
+    toast('Version restored', 'success');
+  });
   lastSavedJSON = JSON.stringify(doc.blocks);
 
   // Auto-save on editor changes

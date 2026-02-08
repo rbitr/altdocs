@@ -1,6 +1,7 @@
 import type { Editor } from './editor.js';
 import type { BlockType, Alignment } from '../shared/model.js';
 import { ShortcutsPanel } from './shortcuts-panel.js';
+import { VersionPanel } from './version-panel.js';
 
 interface ToolbarButton {
   element: HTMLButtonElement;
@@ -12,11 +13,14 @@ export class Toolbar {
   private editor: Editor;
   private buttons: Map<string, ToolbarButton> = new Map();
   private shortcutsPanel: ShortcutsPanel;
+  private versionPanel: VersionPanel;
+  private onVersionRestore: ((record: { title: string; content: string }) => void) | null = null;
 
   constructor(container: HTMLElement, editor: Editor) {
     this.container = container;
     this.editor = editor;
     this.shortcutsPanel = new ShortcutsPanel();
+    this.versionPanel = new VersionPanel();
     this.container.className = 'altdocs-toolbar';
     this.container.setAttribute('role', 'toolbar');
 
@@ -123,6 +127,9 @@ export class Toolbar {
 
     // Help group
     const helpGroup = this.createGroup();
+    this.addButton(helpGroup, 'version-history', '\u29d6', 'Version History', () => {
+      this.openVersionPanel();
+    });
     this.addButton(helpGroup, 'shortcuts', '?', 'Keyboard Shortcuts (Ctrl+/)', () => {
       this.shortcutsPanel.toggle();
     });
@@ -443,6 +450,21 @@ export class Toolbar {
   /** Toggle the keyboard shortcuts panel */
   toggleShortcutsPanel(): void {
     this.shortcutsPanel.toggle();
+  }
+
+  /** Set callback for version restore */
+  setVersionRestoreHandler(handler: (record: { title: string; content: string }) => void): void {
+    this.onVersionRestore = handler;
+  }
+
+  /** Open the version history panel */
+  openVersionPanel(): void {
+    const docId = this.editor.doc.id;
+    this.versionPanel.open(docId, (record) => {
+      if (this.onVersionRestore) {
+        this.onVersionRestore(record);
+      }
+    });
   }
 
   /** Get the toolbar container element */

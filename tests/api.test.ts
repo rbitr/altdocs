@@ -194,6 +194,125 @@ describe('API Endpoints', () => {
     });
   });
 
+  describe('GET /api/documents/:id/versions', () => {
+    it('returns version list after updates', async () => {
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'doc1', title: 'Test', content: '[]' }),
+      });
+      // Update twice to create versions
+      await fetch(`${baseUrl}/api/documents/doc1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Update 1', content: '[1]' }),
+      });
+      await fetch(`${baseUrl}/api/documents/doc1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Update 2', content: '[2]' }),
+      });
+
+      const res = await fetch(`${baseUrl}/api/documents/doc1/versions`);
+      expect(res.status).toBe(200);
+      const versions = await res.json();
+      expect(versions.length).toBe(2);
+      expect(versions[0].version_number).toBe(2);
+      expect(versions[1].version_number).toBe(1);
+      // List items don't include content
+      expect(versions[0].content).toBeUndefined();
+    });
+
+    it('returns 404 for non-existent document', async () => {
+      const res = await fetch(`${baseUrl}/api/documents/nope/versions`);
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/documents/:id/versions/:version', () => {
+    it('returns a specific version with content', async () => {
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'doc1', title: 'Test', content: '[]' }),
+      });
+      await fetch(`${baseUrl}/api/documents/doc1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'V1 Title', content: '[1]' }),
+      });
+
+      const res = await fetch(`${baseUrl}/api/documents/doc1/versions/1`);
+      expect(res.status).toBe(200);
+      const version = await res.json();
+      expect(version.version_number).toBe(1);
+      expect(version.title).toBe('V1 Title');
+      expect(version.content).toBe('[1]');
+    });
+
+    it('returns 404 for non-existent version', async () => {
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'doc1', title: 'Test', content: '[]' }),
+      });
+      const res = await fetch(`${baseUrl}/api/documents/doc1/versions/99`);
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 400 for invalid version number', async () => {
+      const res = await fetch(`${baseUrl}/api/documents/doc1/versions/abc`);
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('POST /api/documents/:id/versions/:version/restore', () => {
+    it('restores a version and updates the document', async () => {
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'doc1', title: 'Original', content: '[0]' }),
+      });
+      await fetch(`${baseUrl}/api/documents/doc1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'V1 Title', content: '[1]' }),
+      });
+      await fetch(`${baseUrl}/api/documents/doc1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'V2 Title', content: '[2]' }),
+      });
+
+      // Restore version 1
+      const res = await fetch(`${baseUrl}/api/documents/doc1/versions/1/restore`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(200);
+      const restored = await res.json();
+      expect(restored.title).toBe('V1 Title');
+      expect(restored.content).toBe('[1]');
+
+      // Verify the document now has the restored content
+      const getRes = await fetch(`${baseUrl}/api/documents/doc1`);
+      const doc = await getRes.json();
+      expect(doc.title).toBe('V1 Title');
+      expect(doc.content).toBe('[1]');
+    });
+
+    it('returns 404 for non-existent version', async () => {
+      await fetch(`${baseUrl}/api/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'doc1', title: 'Test', content: '[]' }),
+      });
+      const res = await fetch(`${baseUrl}/api/documents/doc1/versions/99/restore`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
   describe('GET /api/documents', () => {
     it('returns empty list when no documents', async () => {
       const res = await fetch(`${baseUrl}/api/documents`);

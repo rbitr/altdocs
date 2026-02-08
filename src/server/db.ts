@@ -20,6 +20,22 @@ export interface DocumentListItem {
   updated_at: string;
 }
 
+export interface VersionRecord {
+  id: number;
+  document_id: string;
+  version_number: number;
+  title: string;
+  content: string;
+  created_at: string;
+}
+
+export interface VersionListItem {
+  id: number;
+  version_number: number;
+  title: string;
+  created_at: string;
+}
+
 const DATA_DIR = path.resolve(__dirname, '../../data');
 const DB_PATH = path.join(DATA_DIR, 'altdocs.db');
 
@@ -44,6 +60,18 @@ function initDb(): Database.Database {
       updated_at TEXT NOT NULL
     )
   `);
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS document_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id TEXT NOT NULL,
+      version_number INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+      UNIQUE(document_id, version_number)
+    )
+  `);
   return database;
 }
 
@@ -65,25 +93,82 @@ export function createDocument(id: string, title: string, content: string): Docu
   return { id, title, content, created_at: now, updated_at: now };
 }
 
+const MAX_VERSIONS_PER_DOC = 50;
+
 export function updateDocument(
   id: string,
   title: string,
   content: string
 ): DocumentRecord | undefined {
-  const existing = db.prepare('SELECT created_at FROM documents WHERE id = ?').get(id) as { created_at: string } | undefined;
+  const existing = db.prepare('SELECT created_at, title, content FROM documents WHERE id = ?').get(id) as { created_at: string; title: string; content: string } | undefined;
   if (!existing) return undefined;
   const now = new Date().toISOString();
   db.prepare('UPDATE documents SET title = ?, content = ?, updated_at = ? WHERE id = ?').run(title, content, now, id);
+  // Only create a version if something actually changed
+  if (title !== existing.title || content !== existing.content) {
+    createVersion(id, title, content);
+  }
   return { id, title, content, created_at: existing.created_at, updated_at: now };
 }
 
+export function createVersion(documentId: string, title: string, content: string): VersionRecord {
+  const now = new Date().toISOString();
+  const lastVersion = db.prepare(
+    'SELECT version_number FROM document_versions WHERE document_id = ? ORDER BY version_number DESC LIMIT 1'
+  ).get(documentId) as { version_number: number } | undefined;
+  const versionNumber = lastVersion ? lastVersion.version_number + 1 : 1;
+
+  const result = db.prepare(
+    'INSERT INTO document_versions (document_id, version_number, title, content, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(documentId, versionNumber, title, content, now);
+
+  // Prune old versions beyond the limit
+  const count = db.prepare(
+    'SELECT COUNT(*) as cnt FROM document_versions WHERE document_id = ?'
+  ).get(documentId) as { cnt: number };
+  if (count.cnt > MAX_VERSIONS_PER_DOC) {
+    db.prepare(
+      `DELETE FROM document_versions WHERE document_id = ? AND id NOT IN (
+        SELECT id FROM document_versions WHERE document_id = ? ORDER BY version_number DESC LIMIT ?
+      )`
+    ).run(documentId, documentId, MAX_VERSIONS_PER_DOC);
+  }
+
+  return {
+    id: result.lastInsertRowid as number,
+    document_id: documentId,
+    version_number: versionNumber,
+    title,
+    content,
+    created_at: now,
+  };
+}
+
+export function listVersions(documentId: string): VersionListItem[] {
+  return db.prepare(
+    'SELECT id, version_number, title, created_at FROM document_versions WHERE document_id = ? ORDER BY version_number DESC'
+  ).all(documentId) as VersionListItem[];
+}
+
+export function getVersion(documentId: string, versionNumber: number): VersionRecord | undefined {
+  return db.prepare(
+    'SELECT id, document_id, version_number, title, content, created_at FROM document_versions WHERE document_id = ? AND version_number = ?'
+  ).get(documentId, versionNumber) as VersionRecord | undefined;
+}
+
+export function deleteVersions(documentId: string): void {
+  db.prepare('DELETE FROM document_versions WHERE document_id = ?').run(documentId);
+}
+
 export function deleteDocument(id: string): boolean {
+  deleteVersions(id);
   const result = db.prepare('DELETE FROM documents WHERE id = ?').run(id);
   return result.changes > 0;
 }
 
 /** Reset store — for testing only. Deletes all rows. */
 export function resetStore(): void {
+  db.prepare('DELETE FROM document_versions').run();
   db.prepare('DELETE FROM documents').run();
 }
 
@@ -97,6 +182,18 @@ export function useMemoryDb(): void {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS document_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id TEXT NOT NULL,
+      version_number INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+      UNIQUE(document_id, version_number)
     )
   `);
 }

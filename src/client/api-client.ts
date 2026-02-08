@@ -65,6 +65,42 @@ export async function deleteDocumentById(id: string): Promise<void> {
   if (!res.ok) throw new Error(`Failed to delete document: ${res.status}`);
 }
 
+export interface VersionListItem {
+  id: number;
+  version_number: number;
+  title: string;
+  created_at: string;
+}
+
+export interface VersionRecord {
+  id: number;
+  document_id: string;
+  version_number: number;
+  title: string;
+  content: string;
+  created_at: string;
+}
+
+export async function fetchVersions(docId: string): Promise<VersionListItem[]> {
+  const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(docId)}/versions`);
+  if (!res.ok) throw new Error(`Failed to list versions: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchVersion(docId: string, versionNumber: number): Promise<VersionRecord> {
+  const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(docId)}/versions/${versionNumber}`);
+  if (!res.ok) throw new Error(`Failed to load version: ${res.status}`);
+  return res.json();
+}
+
+export async function restoreVersion(docId: string, versionNumber: number): Promise<DocumentRecord> {
+  const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(docId)}/versions/${versionNumber}/restore`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(`Failed to restore version: ${res.status}`);
+  return res.json();
+}
+
 export async function duplicateDocument(sourceId: string, newId: string, newTitle: string): Promise<DocumentRecord> {
   const source = await fetchDocument(sourceId);
   const res = await fetchWithTimeout(BASE, {

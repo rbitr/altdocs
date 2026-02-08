@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDocument, listDocuments, createDocument, updateDocument, deleteDocument } from './db.js';
+import { getDocument, listDocuments, createDocument, updateDocument, deleteDocument, listVersions, getVersion } from './db.js';
 
 const router = Router();
 
@@ -64,6 +64,52 @@ router.delete('/api/documents/:id', (req, res) => {
     return;
   }
   res.status(204).end();
+});
+
+// List versions of a document
+router.get('/api/documents/:id/versions', (req, res) => {
+  const doc = getDocument(req.params.id);
+  if (!doc) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+  const versions = listVersions(req.params.id);
+  res.json(versions);
+});
+
+// Get a specific version
+router.get('/api/documents/:id/versions/:version', (req, res) => {
+  const versionNumber = parseInt(req.params.version, 10);
+  if (isNaN(versionNumber)) {
+    res.status(400).json({ error: 'Invalid version number' });
+    return;
+  }
+  const version = getVersion(req.params.id, versionNumber);
+  if (!version) {
+    res.status(404).json({ error: 'Version not found' });
+    return;
+  }
+  res.json(version);
+});
+
+// Restore a version
+router.post('/api/documents/:id/versions/:version/restore', (req, res) => {
+  const versionNumber = parseInt(req.params.version, 10);
+  if (isNaN(versionNumber)) {
+    res.status(400).json({ error: 'Invalid version number' });
+    return;
+  }
+  const version = getVersion(req.params.id, versionNumber);
+  if (!version) {
+    res.status(404).json({ error: 'Version not found' });
+    return;
+  }
+  const updated = updateDocument(req.params.id, version.title, version.content);
+  if (!updated) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+  res.json(updated);
 });
 
 export { router as apiRouter };
