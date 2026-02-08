@@ -5,10 +5,12 @@ import type { Document } from '../shared/model.js';
 import { fetchDocumentList, fetchDocument, saveDocument, deleteDocumentById, duplicateDocument, ensureSession, updateMe } from './api-client.js';
 import type { UserInfo } from './api-client.js';
 import { toast } from './toast.js';
+import { CollaborationClient } from './collaboration.js';
 import type { Block } from '../shared/model.js';
 
 let editor: Editor | null = null;
 let toolbar: Toolbar | null = null;
+let collab: CollaborationClient | null = null;
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSavedJSON = '';
 let currentUser: UserInfo | null = null;
@@ -150,6 +152,19 @@ function startNameEdit(bar: HTMLElement, nameSpan: HTMLElement): void {
       input.blur();
     }
   });
+}
+
+function updateCollaboratorsList(users: Array<{ userId: string; displayName: string; color: string }>): void {
+  const el = document.getElementById('collab-users');
+  if (!el) return;
+  el.innerHTML = '';
+  for (const user of users) {
+    const dot = document.createElement('span');
+    dot.className = 'collab-user-dot';
+    dot.style.backgroundColor = user.color;
+    dot.title = user.displayName;
+    el.appendChild(dot);
+  }
 }
 
 // ── Views ───────────────────────────────────────────
@@ -377,9 +392,37 @@ async function openEditor(container: HTMLElement, docId: string): Promise<void> 
     // Server may not be running in dev/test mode — that's OK
   }
 
+  // Start real-time collaboration
+  collab = new CollaborationClient(editor, docId, {
+    onConnectionChange: (state) => {
+      const indicator = document.getElementById('collab-status');
+      if (indicator) {
+        indicator.textContent = state === 'connected' ? 'Live' : '';
+        indicator.className = `collab-status collab-status-${state}`;
+      }
+    },
+    onRemoteUsersChange: (users) => {
+      updateCollaboratorsList(users);
+    },
+  });
+  collab.connect();
+
+  // Add collaboration status indicator to status bar
+  const collabStatus = document.createElement('span');
+  collabStatus.id = 'collab-status';
+  collabStatus.className = 'collab-status collab-status-connecting';
+  statusBar.appendChild(collabStatus);
+
+  // Collaborators list
+  const collabList = document.createElement('span');
+  collabList.id = 'collab-users';
+  collabList.className = 'collab-users';
+  statusBar.appendChild(collabList);
+
   // Expose for debugging
   (window as any).__editor = editor;
   (window as any).__toolbar = toolbar;
+  (window as any).__collab = collab;
 }
 
 async function route(): Promise<void> {
@@ -391,7 +434,11 @@ async function route(): Promise<void> {
     clearTimeout(autoSaveTimer);
     autoSaveTimer = null;
   }
-  // Flush pending save before navigating away
+  // Disconnect collaboration and flush pending save before navigating away
+  if (collab) {
+    collab.disconnect();
+    collab = null;
+  }
   if (editor) {
     await doAutoSave();
     editor = null;

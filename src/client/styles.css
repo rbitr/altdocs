@@ -1017,6 +1017,39 @@ body {
   cursor: default;
 }
 
+/* === Collaboration status === */
+
+.collab-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.collab-status-connected {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.collab-status-connecting {
+  color: #ca8a04;
+  background: #fef9c3;
+}
+
+.collab-users {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.collab-user-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
 /* === Print styles === */
 @media print {
   /* Reset page */

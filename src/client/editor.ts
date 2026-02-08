@@ -26,6 +26,7 @@ export class Editor {
   private container: HTMLElement;
   private rendering = false;
   private onUpdateCallbacks: Array<() => void> = [];
+  private onOperationCallbacks: Array<(op: Operation) => void> = [];
   private onShortcutsPanelToggle: (() => void) | null = null;
 
   constructor(container: HTMLElement, doc?: Document) {
@@ -61,6 +62,29 @@ export class Editor {
   /** Register a callback to be called when the editor state changes */
   onUpdate(callback: () => void): void {
     this.onUpdateCallbacks.push(callback);
+  }
+
+  /** Register a callback that fires when a local operation is applied */
+  onOperation(callback: (op: Operation) => void): void {
+    this.onOperationCallbacks.push(callback);
+  }
+
+  private notifyOperation(op: Operation): void {
+    for (const cb of this.onOperationCallbacks) {
+      cb(op);
+    }
+  }
+
+  /** Apply an operation from a remote collaborator (no history push, no operation callback) */
+  applyRemoteOperation(op: Operation): void {
+    this.doc = applyOperation(this.doc, op);
+    this.render();
+  }
+
+  /** Apply a local operation: update doc, notify operation listeners */
+  private applyLocal(op: Operation): void {
+    this.doc = applyOperation(this.doc, op);
+    this.notifyOperation(op);
   }
 
   /** Update cursor in DOM and notify listeners */
@@ -303,7 +327,7 @@ export class Editor {
         position: { ...this.cursor.focus },
         text: lines[0],
       };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
       this.cursor = collapsedCursor({
         blockIndex: this.cursor.focus.blockIndex,
         offset: this.cursor.focus.offset + lines[0].length,
@@ -320,7 +344,7 @@ export class Editor {
           position: { blockIndex: currentBlockIndex, offset: currentOffset },
           text: lines[0],
         };
-        this.doc = applyOperation(this.doc, op);
+        this.applyLocal(op);
         currentOffset += lines[0].length;
       }
 
@@ -330,7 +354,7 @@ export class Editor {
           type: 'split_block',
           position: { blockIndex: currentBlockIndex, offset: currentOffset },
         };
-        this.doc = applyOperation(this.doc, splitOp);
+        this.applyLocal(splitOp);
         currentBlockIndex++;
         currentOffset = 0;
 
@@ -340,7 +364,7 @@ export class Editor {
             position: { blockIndex: currentBlockIndex, offset: 0 },
             text: lines[i],
           };
-          this.doc = applyOperation(this.doc, insertOp);
+          this.applyLocal(insertOp);
           currentOffset = lines[i].length;
         }
       }
@@ -389,7 +413,7 @@ export class Editor {
       position: { ...this.cursor.focus },
       text,
     };
-    this.doc = applyOperation(this.doc, op);
+    this.applyLocal(op);
 
     // Move cursor forward by the inserted text length
     this.cursor = collapsedCursor({
@@ -444,7 +468,7 @@ export class Editor {
           end: { blockIndex: pos.blockIndex, offset: pos.offset },
         },
       };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
       this.cursor = collapsedCursor({
         blockIndex: pos.blockIndex,
         offset: pos.offset - 1,
@@ -466,7 +490,7 @@ export class Editor {
           type: 'merge_block',
           blockIndex: pos.blockIndex,
         };
-        this.doc = applyOperation(this.doc, op);
+        this.applyLocal(op);
         this.cursor = collapsedCursor({
           blockIndex: pos.blockIndex - 1,
           offset: prevBlockLen,
@@ -498,7 +522,7 @@ export class Editor {
           end: { blockIndex: pos.blockIndex, offset: pos.offset + 1 },
         },
       };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
       // Cursor stays in place
     } else if (pos.blockIndex < this.doc.blocks.length - 1) {
       // At end of block — merge next block into this one
@@ -506,7 +530,7 @@ export class Editor {
         type: 'merge_block',
         blockIndex: pos.blockIndex + 1,
       };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
       // Cursor stays in place
     }
 
@@ -530,7 +554,7 @@ export class Editor {
         afterBlockIndex: this.cursor.focus.blockIndex,
         blockType: 'paragraph',
       };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
       this.cursor = collapsedCursor({
         blockIndex: this.cursor.focus.blockIndex + 1,
         offset: 0,
@@ -543,7 +567,7 @@ export class Editor {
       type: 'split_block',
       position: { ...this.cursor.focus },
     };
-    this.doc = applyOperation(this.doc, op);
+    this.applyLocal(op);
 
     // Move cursor to start of new block
     this.cursor = collapsedCursor({
@@ -560,7 +584,7 @@ export class Editor {
       type: 'delete_text',
       range,
     };
-    this.doc = applyOperation(this.doc, op);
+    this.applyLocal(op);
     this.cursor = collapsedCursor(range.start);
   }
 
@@ -581,14 +605,14 @@ export class Editor {
         range,
         style,
       };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     } else {
       const op: Operation = {
         type: 'apply_formatting',
         range,
         style,
       };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     }
 
     this.render();
@@ -626,10 +650,10 @@ export class Editor {
     const range = getSelectionRange(this.cursor);
     if (size === undefined) {
       const op: Operation = { type: 'remove_formatting', range, style: { fontSize: 0 } };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     } else {
       const op: Operation = { type: 'apply_formatting', range, style: { fontSize: size } };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     }
     this.render();
   }
@@ -641,10 +665,10 @@ export class Editor {
     const range = getSelectionRange(this.cursor);
     if (color === undefined) {
       const op: Operation = { type: 'remove_formatting', range, style: { color: '' } };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     } else {
       const op: Operation = { type: 'apply_formatting', range, style: { color } };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     }
     this.render();
   }
@@ -656,10 +680,10 @@ export class Editor {
     const range = getSelectionRange(this.cursor);
     if (backgroundColor === undefined) {
       const op: Operation = { type: 'remove_formatting', range, style: { backgroundColor: '' } };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     } else {
       const op: Operation = { type: 'apply_formatting', range, style: { backgroundColor } };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     }
     this.render();
   }
@@ -683,10 +707,10 @@ export class Editor {
     const range = getSelectionRange(this.cursor);
     if (family === undefined) {
       const op: Operation = { type: 'remove_formatting', range, style: { fontFamily: '' } };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     } else {
       const op: Operation = { type: 'apply_formatting', range, style: { fontFamily: family } };
-      this.doc = applyOperation(this.doc, op);
+      this.applyLocal(op);
     }
     this.render();
   }
@@ -712,7 +736,7 @@ export class Editor {
       blockIndex,
       newType,
     };
-    this.doc = applyOperation(this.doc, op);
+    this.applyLocal(op);
     this.render();
   }
 
@@ -733,7 +757,7 @@ export class Editor {
       afterBlockIndex: blockIndex,
       blockType: 'horizontal-rule',
     };
-    this.doc = applyOperation(this.doc, insertOp);
+    this.applyLocal(insertOp);
 
     // Insert a new paragraph after the HR for continued editing
     const paraOp: Operation = {
@@ -741,7 +765,7 @@ export class Editor {
       afterBlockIndex: blockIndex + 1,
       blockType: 'paragraph',
     };
-    this.doc = applyOperation(this.doc, paraOp);
+    this.applyLocal(paraOp);
 
     // Move cursor to the new paragraph
     this.cursor = collapsedCursor({
@@ -761,7 +785,7 @@ export class Editor {
       blockIndex,
       newAlignment,
     };
-    this.doc = applyOperation(this.doc, op);
+    this.applyLocal(op);
     this.render();
   }
 
