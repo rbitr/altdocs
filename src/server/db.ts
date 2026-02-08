@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -36,6 +37,60 @@ export interface VersionListItem {
   created_at: string;
 }
 
+export interface UserRecord {
+  id: string;
+  display_name: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionRecord {
+  token: string;
+  user_id: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface SessionWithUser {
+  token: string;
+  user_id: string;
+  display_name: string;
+  color: string;
+  expires_at: string;
+}
+
+const CURSOR_COLORS = [
+  '#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4',
+  '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990',
+  '#dcbeff', '#9A6324',
+];
+
+const ANIMAL_NAMES = [
+  'Fox', 'Owl', 'Bear', 'Wolf', 'Hawk', 'Deer', 'Lynx', 'Otter',
+  'Crane', 'Raven', 'Heron', 'Bison', 'Eagle', 'Moose', 'Finch', 'Viper',
+];
+
+function generateToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function generateUserId(): string {
+  return `user_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function randomColor(): string {
+  return CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)];
+}
+
+function randomDisplayName(): string {
+  const animal = ANIMAL_NAMES[Math.floor(Math.random() * ANIMAL_NAMES.length)];
+  const num = Math.floor(Math.random() * 1000);
+  return `Anonymous ${animal} ${num}`;
+}
+
+const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
 const DATA_DIR = path.resolve(__dirname, '../../data');
 const DB_PATH = path.join(DATA_DIR, 'altdocs.db');
 
@@ -70,6 +125,24 @@ function initDb(): Database.Database {
       created_at TEXT NOT NULL,
       FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
       UNIQUE(document_id, version_number)
+    )
+  `);
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
   return database;
@@ -166,10 +239,65 @@ export function deleteDocument(id: string): boolean {
   return result.changes > 0;
 }
 
+// ── User & Session operations ──────────────────────────────
+
+export function createUser(displayName?: string, color?: string): UserRecord {
+  const now = new Date().toISOString();
+  const id = generateUserId();
+  const name = displayName || randomDisplayName();
+  const col = color || randomColor();
+  db.prepare('INSERT INTO users (id, display_name, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, name, col, now, now);
+  return { id, display_name: name, color: col, created_at: now, updated_at: now };
+}
+
+export function getUser(id: string): UserRecord | undefined {
+  return db.prepare('SELECT id, display_name, color, created_at, updated_at FROM users WHERE id = ?').get(id) as UserRecord | undefined;
+}
+
+export function updateUser(id: string, displayName: string): UserRecord | undefined {
+  const existing = getUser(id);
+  if (!existing) return undefined;
+  const now = new Date().toISOString();
+  db.prepare('UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?').run(displayName, now, id);
+  return { ...existing, display_name: displayName, updated_at: now };
+}
+
+export function createSession(userId: string): SessionRecord {
+  const now = new Date();
+  const token = generateToken();
+  const createdAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + SESSION_DURATION_MS).toISOString();
+  db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(token, userId, createdAt, expiresAt);
+  return { token, user_id: userId, created_at: createdAt, expires_at: expiresAt };
+}
+
+export function getSessionWithUser(token: string): SessionWithUser | undefined {
+  const row = db.prepare(`
+    SELECT s.token, s.user_id, u.display_name, u.color, s.expires_at
+    FROM sessions s JOIN users u ON s.user_id = u.id
+    WHERE s.token = ?
+  `).get(token) as SessionWithUser | undefined;
+  if (!row) return undefined;
+  // Check expiry
+  if (new Date(row.expires_at) < new Date()) {
+    db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+    return undefined;
+  }
+  return row;
+}
+
+export function deleteExpiredSessions(): number {
+  const now = new Date().toISOString();
+  const result = db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now);
+  return result.changes;
+}
+
 /** Reset store — for testing only. Deletes all rows. */
 export function resetStore(): void {
+  db.prepare('DELETE FROM sessions').run();
   db.prepare('DELETE FROM document_versions').run();
   db.prepare('DELETE FROM documents').run();
+  db.prepare('DELETE FROM users').run();
 }
 
 /** Switch to an in-memory database — for testing only. */
@@ -194,6 +322,24 @@ export function useMemoryDb(): void {
       created_at TEXT NOT NULL,
       FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
       UNIQUE(document_id, version_number)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 }

@@ -14,14 +14,108 @@ export interface DocumentRecord {
   updated_at: string;
 }
 
+export interface UserInfo {
+  id: string;
+  display_name: string;
+  color: string;
+}
+
+export interface SessionResponse {
+  token: string;
+  user: UserInfo;
+}
+
 const BASE = '/api/documents';
+const AUTH_BASE = '/api/auth';
 const TIMEOUT_MS = 3000;
+const TOKEN_KEY = 'altdocs_session_token';
+
+// ── Token management ────────────────────────────────
+
+let cachedToken: string | null = null;
+
+export function getStoredToken(): string | null {
+  if (cachedToken) return cachedToken;
+  cachedToken = localStorage.getItem(TOKEN_KEY);
+  return cachedToken;
+}
+
+export function setStoredToken(token: string): void {
+  cachedToken = token;
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearStoredToken(): void {
+  cachedToken = null;
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+// ── Fetch helpers ───────────────────────────────────
+
+function authHeaders(): Record<string, string> {
+  const token = getStoredToken();
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+}
 
 function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+  // Merge auth headers with any provided headers
+  const headers = { ...authHeaders(), ...(options?.headers as Record<string, string> || {}) };
+  return fetch(url, { ...options, headers, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
+
+// ── Auth API ────────────────────────────────────────
+
+export async function createSession(): Promise<SessionResponse> {
+  const res = await fetchWithTimeout(`${AUTH_BASE}/session`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(`Failed to create session: ${res.status}`);
+  const data: SessionResponse = await res.json();
+  setStoredToken(data.token);
+  return data;
+}
+
+export async function getMe(): Promise<UserInfo> {
+  const res = await fetchWithTimeout(`${AUTH_BASE}/me`);
+  if (!res.ok) {
+    if (res.status === 401) {
+      clearStoredToken();
+    }
+    throw new Error(`Failed to get user: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateMe(displayName: string): Promise<UserInfo> {
+  const res = await fetchWithTimeout(`${AUTH_BASE}/me`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ display_name: displayName }),
+  });
+  if (!res.ok) throw new Error(`Failed to update user: ${res.status}`);
+  return res.json();
+}
+
+/** Ensure a session exists. Returns user info. Creates a new session if needed. */
+export async function ensureSession(): Promise<UserInfo> {
+  const token = getStoredToken();
+  if (token) {
+    try {
+      return await getMe();
+    } catch {
+      // Token invalid or expired — create new session
+    }
+  }
+  const session = await createSession();
+  return session.user;
+}
+
+// ── Document API ────────────────────────────────────
 
 export async function fetchDocumentList(): Promise<DocumentListItem[]> {
   const res = await fetchWithTimeout(BASE);

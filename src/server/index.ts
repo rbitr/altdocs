@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { apiRouter } from './api.js';
+import { authRouter, optionalAuth } from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,7 +13,11 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 // Parse JSON request bodies
 app.use(express.json());
 
+// Extract user from auth token on all requests
+app.use(optionalAuth);
+
 // Mount API routes
+app.use(authRouter);
 app.use(apiRouter);
 
 // Serve static files from the built client directory

@@ -2,7 +2,8 @@ import { Editor } from './editor.js';
 import { Toolbar } from './toolbar.js';
 import { createEmptyDocument } from '../shared/model.js';
 import type { Document } from '../shared/model.js';
-import { fetchDocumentList, fetchDocument, saveDocument, deleteDocumentById, duplicateDocument } from './api-client.js';
+import { fetchDocumentList, fetchDocument, saveDocument, deleteDocumentById, duplicateDocument, ensureSession, updateMe } from './api-client.js';
+import type { UserInfo } from './api-client.js';
 import { toast } from './toast.js';
 import type { Block } from '../shared/model.js';
 
@@ -10,6 +11,7 @@ let editor: Editor | null = null;
 let toolbar: Toolbar | null = null;
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSavedJSON = '';
+let currentUser: UserInfo | null = null;
 
 const AUTO_SAVE_DELAY = 2000; // 2 seconds after last change
 
@@ -75,6 +77,82 @@ function createLoadingIndicator(message = 'Loading...'): HTMLElement {
   container.appendChild(label);
   return container;
 }
+
+// ── User profile bar ────────────────────────────────
+
+function renderUserProfile(): void {
+  // Remove existing if any
+  const existing = document.getElementById('user-profile-bar');
+  if (existing) existing.remove();
+
+  if (!currentUser) return;
+
+  const bar = document.createElement('div');
+  bar.id = 'user-profile-bar';
+  bar.className = 'user-profile-bar';
+
+  const colorDot = document.createElement('span');
+  colorDot.className = 'user-color-dot';
+  colorDot.style.backgroundColor = currentUser.color;
+  bar.appendChild(colorDot);
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'user-display-name';
+  nameSpan.textContent = currentUser.display_name;
+  nameSpan.title = 'Click to edit your display name';
+  nameSpan.addEventListener('click', () => startNameEdit(bar, nameSpan));
+  bar.appendChild(nameSpan);
+
+  // Insert before #app
+  const app = document.getElementById('app');
+  if (app && app.parentNode) {
+    app.parentNode.insertBefore(bar, app);
+  }
+}
+
+function startNameEdit(bar: HTMLElement, nameSpan: HTMLElement): void {
+  // Replace name span with an input
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'user-name-input';
+  input.value = currentUser?.display_name || '';
+  input.maxLength = 50;
+
+  nameSpan.replaceWith(input);
+  input.focus();
+  input.select();
+
+  const finish = async () => {
+    const newName = input.value.trim();
+    if (newName && newName !== currentUser?.display_name) {
+      try {
+        currentUser = await updateMe(newName);
+        toast('Display name updated', 'success');
+      } catch {
+        toast('Failed to update name', 'error');
+      }
+    }
+    // Replace input back with span
+    const span = document.createElement('span');
+    span.className = 'user-display-name';
+    span.textContent = currentUser?.display_name || '';
+    span.title = 'Click to edit your display name';
+    span.addEventListener('click', () => startNameEdit(bar, span));
+    input.replaceWith(span);
+  };
+
+  input.addEventListener('blur', finish);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      input.blur();
+    } else if (e.key === 'Escape') {
+      input.value = currentUser?.display_name || '';
+      input.blur();
+    }
+  });
+}
+
+// ── Views ───────────────────────────────────────────
 
 async function renderDocumentList(container: HTMLElement): Promise<void> {
   container.innerHTML = '';
@@ -328,8 +406,24 @@ async function route(): Promise<void> {
   }
 }
 
-// Route on hash change
-window.addEventListener('hashchange', () => route());
+// ── App initialization ──────────────────────────────
 
-// Initial route
-route();
+async function init(): Promise<void> {
+  // Initialize session (creates anonymous user if needed)
+  try {
+    currentUser = await ensureSession();
+  } catch {
+    // Server may not be running — continue without auth
+  }
+
+  // Render user profile bar
+  renderUserProfile();
+
+  // Route on hash change
+  window.addEventListener('hashchange', () => route());
+
+  // Initial route
+  await route();
+}
+
+init();

@@ -9,6 +9,12 @@ import {
   listVersions,
   getVersion,
   deleteVersions,
+  createUser,
+  getUser,
+  updateUser,
+  createSession,
+  getSessionWithUser,
+  deleteExpiredSessions,
   resetStore,
   useMemoryDb,
 } from '../src/server/db.js';
@@ -206,5 +212,131 @@ describe('Version History', () => {
 
     expect(listVersions('doc1').length).toBe(2);
     expect(listVersions('doc2').length).toBe(1);
+  });
+});
+
+describe('User Store', () => {
+  beforeAll(() => {
+    useMemoryDb();
+  });
+
+  beforeEach(() => {
+    resetStore();
+  });
+
+  it('creates a user with auto-generated fields', () => {
+    const user = createUser();
+    expect(user.id).toMatch(/^user_/);
+    expect(user.display_name).toBeTruthy();
+    expect(user.display_name).toMatch(/^Anonymous /);
+    expect(user.color).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(user.created_at).toBeTruthy();
+    expect(user.updated_at).toBeTruthy();
+  });
+
+  it('creates a user with custom display name and color', () => {
+    const user = createUser('Alice', '#ff0000');
+    expect(user.display_name).toBe('Alice');
+    expect(user.color).toBe('#ff0000');
+  });
+
+  it('retrieves a user by ID', () => {
+    const user = createUser('Bob', '#00ff00');
+    const fetched = getUser(user.id);
+    expect(fetched).toEqual(user);
+  });
+
+  it('returns undefined for non-existent user', () => {
+    expect(getUser('nonexistent')).toBeUndefined();
+  });
+
+  it('updates a user display name', () => {
+    const user = createUser('Charlie');
+    const updated = updateUser(user.id, 'Chuck');
+    expect(updated).toBeTruthy();
+    expect(updated!.display_name).toBe('Chuck');
+    expect(updated!.color).toBe(user.color);
+    expect(updated!.id).toBe(user.id);
+
+    const fetched = getUser(user.id);
+    expect(fetched!.display_name).toBe('Chuck');
+  });
+
+  it('returns undefined when updating non-existent user', () => {
+    expect(updateUser('nonexistent', 'Name')).toBeUndefined();
+  });
+
+  it('each user gets a unique ID', () => {
+    const user1 = createUser();
+    const user2 = createUser();
+    expect(user1.id).not.toBe(user2.id);
+  });
+});
+
+describe('Session Store', () => {
+  beforeAll(() => {
+    useMemoryDb();
+  });
+
+  beforeEach(() => {
+    resetStore();
+  });
+
+  it('creates a session for a user', () => {
+    const user = createUser('Test User');
+    const session = createSession(user.id);
+    expect(session.token).toBeTruthy();
+    expect(session.token.length).toBe(64); // 32 bytes hex
+    expect(session.user_id).toBe(user.id);
+    expect(session.created_at).toBeTruthy();
+    expect(session.expires_at).toBeTruthy();
+    // Expires in the future
+    expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('retrieves session with user info', () => {
+    const user = createUser('Session User', '#123456');
+    const session = createSession(user.id);
+    const result = getSessionWithUser(session.token);
+    expect(result).toBeTruthy();
+    expect(result!.token).toBe(session.token);
+    expect(result!.user_id).toBe(user.id);
+    expect(result!.display_name).toBe('Session User');
+    expect(result!.color).toBe('#123456');
+  });
+
+  it('returns undefined for non-existent token', () => {
+    expect(getSessionWithUser('badtoken')).toBeUndefined();
+  });
+
+  it('returns undefined for expired session', () => {
+    const user = createUser('Expired User');
+    // Create session with fake time in the past
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2020-01-01T00:00:00Z'));
+    const session = createSession(user.id);
+    vi.useRealTimers();
+
+    // Session should be expired now
+    expect(getSessionWithUser(session.token)).toBeUndefined();
+  });
+
+  it('deletes expired sessions', () => {
+    const user = createUser('Cleanup User');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2020-01-01T00:00:00Z'));
+    createSession(user.id);
+    createSession(user.id);
+    vi.useRealTimers();
+
+    const deleted = deleteExpiredSessions();
+    expect(deleted).toBe(2);
+  });
+
+  it('each session gets a unique token', () => {
+    const user = createUser();
+    const s1 = createSession(user.id);
+    const s2 = createSession(user.id);
+    expect(s1.token).not.toBe(s2.token);
   });
 });
