@@ -374,7 +374,7 @@ export class CollaborationServer {
   private handleCursor(
     ws: WebSocket,
     clientMeta: { userId: string; displayName: string; color: string; documentId: string | null; shareToken: string | null; readOnly: boolean },
-    msg: { type: 'cursor'; documentId: string; cursor: { blockIndex: number; offset: number } | null }
+    msg: { type: 'cursor'; documentId: string; cursor: { blockIndex: number; offset: number } | null; anchor?: { blockIndex: number; offset: number } | null }
   ): void {
     const room = this.rooms.get(msg.documentId);
     if (!room) return;
@@ -389,7 +389,7 @@ export class CollaborationServer {
     }
     if (!senderClientId) return;
 
-    // Broadcast cursor position to other clients
+    // Broadcast cursor position (and optional selection anchor) to other clients
     this.broadcastToRoom(room, senderClientId, {
       type: 'cursor',
       documentId: msg.documentId,
@@ -397,6 +397,7 @@ export class CollaborationServer {
       displayName: clientMeta.displayName,
       color: clientMeta.color,
       cursor: msg.cursor,
+      anchor: msg.anchor ?? null,
     });
   }
 

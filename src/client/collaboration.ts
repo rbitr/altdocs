@@ -11,6 +11,8 @@ export interface RemoteUser {
   displayName: string;
   color: string;
   cursor: Position | null;
+  /** Selection anchor — when different from cursor, indicates a text selection */
+  anchor: Position | null;
 }
 
 export interface CollaborationEvents {
@@ -119,9 +121,12 @@ export class CollaborationClient {
       // error is followed by close event
     });
 
-    // Wire up the editor's operation callback (only once)
+    // Wire up the editor's operation callback and cursor tracking (only once)
     if (!this.operationListenerAttached) {
       this.editor.onOperation((op: Operation) => this.handleLocalOperation(op));
+      // Also send cursor/selection updates on any editor state change (covers
+      // selection changes from clicks, keyboard navigation, etc.)
+      this.editor.onUpdate(() => this.scheduleCursorUpdate());
       this.operationListenerAttached = true;
     }
   }
@@ -219,6 +224,7 @@ export class CollaborationClient {
         displayName: user.displayName,
         color: user.color,
         cursor: null,
+        anchor: null,
       });
     }
     this.events.onRemoteUsersChange?.([...this.remoteUsers.values()]);
@@ -273,6 +279,7 @@ export class CollaborationClient {
       displayName: msg.displayName,
       color: msg.color,
       cursor: null,
+      anchor: null,
     });
     this.events.onRemoteUsersChange?.([...this.remoteUsers.values()]);
   }
@@ -286,6 +293,7 @@ export class CollaborationClient {
     const user = this.remoteUsers.get(msg.userId);
     if (user) {
       user.cursor = msg.cursor;
+      user.anchor = msg.anchor ?? null;
       this.events.onRemoteUsersChange?.([...this.remoteUsers.values()]);
     }
   }
@@ -334,6 +342,7 @@ export class CollaborationClient {
       type: 'cursor',
       documentId: this.documentId,
       cursor: cursor.focus,
+      anchor: cursor.anchor,
     });
   }
 

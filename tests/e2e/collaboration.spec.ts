@@ -158,6 +158,92 @@ test.describe('Real-Time Collaboration', () => {
     }
   });
 
+  test('shows remote selection highlighting when another user selects text', async ({ browser }) => {
+    const context1 = await browser.newContext();
+    const context2 = await browser.newContext();
+    const page1 = await context1.newPage();
+    const page2 = await context2.newPage();
+
+    try {
+      // Both pages open the same document
+      await page1.goto(`/#/doc/${uniqueDocId}`);
+      await page2.goto(`/#/doc/${uniqueDocId}`);
+
+      // Wait for both editors and collaboration to connect
+      await page1.waitForSelector('.collab-status-connected', { timeout: 10000 });
+      await page2.waitForSelector('.collab-status-connected', { timeout: 10000 });
+
+      // Page 2: click into editor, then select all text with Ctrl+A
+      const editor2 = page2.locator('.altdocs-editor');
+      await editor2.click();
+      await page2.waitForTimeout(100);
+      await page2.keyboard.press('Home');
+      await page2.waitForTimeout(50);
+      await page2.keyboard.press('Shift+End');
+      await page2.waitForTimeout(300);
+
+      // Page 1 should see remote cursor (caret at selection focus)
+      const remoteCaret = page1.locator('.remote-cursor-caret');
+      await expect(remoteCaret.first()).toBeVisible({ timeout: 5000 });
+
+      // Page 1 should also see remote selection highlight rectangles
+      const remoteSelection = page1.locator('.remote-cursor-selection');
+      await expect(remoteSelection.first()).toBeVisible({ timeout: 5000 });
+
+      // Selection highlight should have user's color as background
+      const bgColor = await remoteSelection.first().evaluate(
+        (el) => getComputedStyle(el).backgroundColor
+      );
+      expect(bgColor).toBeTruthy();
+      // Should be some non-transparent color
+      expect(bgColor).not.toBe('rgba(0, 0, 0, 0)');
+    } finally {
+      await context1.close();
+      await context2.close();
+    }
+  });
+
+  test('remote selection disappears when user collapses cursor', async ({ browser }) => {
+    const context1 = await browser.newContext();
+    const context2 = await browser.newContext();
+    const page1 = await context1.newPage();
+    const page2 = await context2.newPage();
+
+    try {
+      await page1.goto(`/#/doc/${uniqueDocId}`);
+      await page2.goto(`/#/doc/${uniqueDocId}`);
+
+      await page1.waitForSelector('.collab-status-connected', { timeout: 10000 });
+      await page2.waitForSelector('.collab-status-connected', { timeout: 10000 });
+
+      // Page 2: select text
+      const editor2 = page2.locator('.altdocs-editor');
+      await editor2.click();
+      await page2.waitForTimeout(100);
+      await page2.keyboard.press('Home');
+      await page2.waitForTimeout(50);
+      await page2.keyboard.press('Shift+End');
+      await page2.waitForTimeout(300);
+
+      // Verify selection highlight appears on page 1
+      const remoteSelection = page1.locator('.remote-cursor-selection');
+      await expect(remoteSelection.first()).toBeVisible({ timeout: 5000 });
+
+      // Page 2: collapse selection by pressing Right arrow
+      await page2.keyboard.press('ArrowRight');
+      await page2.waitForTimeout(300);
+
+      // Page 1: selection highlight should disappear
+      await expect(page1.locator('.remote-cursor-selection')).toHaveCount(0, { timeout: 5000 });
+
+      // But remote cursor caret should still be visible
+      await expect(page1.locator('.remote-cursor-caret').first()).toBeVisible({ timeout: 5000 });
+    } finally {
+      await context1.close();
+      await context2.close();
+    }
+  });
+
   test('remote cursor disappears when user leaves', async ({ browser }) => {
     const context1 = await browser.newContext();
     const context2 = await browser.newContext();

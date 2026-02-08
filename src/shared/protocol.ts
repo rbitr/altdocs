@@ -17,6 +17,8 @@ export type ClientMessage =
       type: 'cursor';
       documentId: string;
       cursor: { blockIndex: number; offset: number } | null;
+      /** Optional anchor position — when present and different from cursor, indicates a selection */
+      anchor?: { blockIndex: number; offset: number } | null;
     };
 
 /** Messages from server to client */
@@ -59,6 +61,8 @@ export type ServerMessage =
       displayName: string;
       color: string;
       cursor: { blockIndex: number; offset: number } | null;
+      /** Optional anchor position — when present and different from cursor, indicates a selection */
+      anchor?: { blockIndex: number; offset: number } | null;
     }
   | {
       type: 'error';

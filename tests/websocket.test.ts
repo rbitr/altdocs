@@ -470,6 +470,55 @@ describe('WebSocket: Cursor Sharing', () => {
     await closeWs(ws1);
     await closeWs(ws2);
   });
+
+  it('broadcasts selection anchor along with cursor', async () => {
+    const docId = createTestDoc();
+    const { ws1, ws2 } = await setupTwoClients(docId);
+
+    // Set up listener BEFORE sending cursor
+    const ws2Cursor = waitForMessage(ws2);
+
+    sendMessage(ws1, {
+      type: 'cursor',
+      documentId: docId,
+      cursor: { blockIndex: 0, offset: 5 },
+      anchor: { blockIndex: 0, offset: 0 },
+    });
+
+    const msg = await ws2Cursor;
+    expect(msg.type).toBe('cursor');
+    if (msg.type === 'cursor') {
+      expect(msg.cursor).toEqual({ blockIndex: 0, offset: 5 });
+      expect(msg.anchor).toEqual({ blockIndex: 0, offset: 0 });
+    }
+
+    await closeWs(ws1);
+    await closeWs(ws2);
+  });
+
+  it('broadcasts null anchor when cursor message has no anchor', async () => {
+    const docId = createTestDoc();
+    const { ws1, ws2 } = await setupTwoClients(docId);
+
+    const ws2Cursor = waitForMessage(ws2);
+
+    // Send cursor without anchor field (backward compat)
+    sendMessage(ws1, {
+      type: 'cursor',
+      documentId: docId,
+      cursor: { blockIndex: 0, offset: 3 },
+    });
+
+    const msg = await ws2Cursor;
+    expect(msg.type).toBe('cursor');
+    if (msg.type === 'cursor') {
+      expect(msg.cursor).toEqual({ blockIndex: 0, offset: 3 });
+      expect(msg.anchor).toBeNull();
+    }
+
+    await closeWs(ws1);
+    await closeWs(ws2);
+  });
 });
 
 describe('WebSocket: Room Management', () => {

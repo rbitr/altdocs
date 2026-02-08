@@ -271,6 +271,68 @@ describe('CollaborationClient', () => {
       const users = client.getRemoteUsers();
       expect(users[0].cursor).toEqual({ blockIndex: 0, offset: 3 });
     });
+
+    it('should track remote selection (anchor) from cursor messages', async () => {
+      const editor = createEditor(makeDoc([makeBlock('Hello')]));
+      const { client } = setupCollab(editor);
+      await connectAndJoin(client, 0, [
+        { userId: 'u1', displayName: 'Alice', color: '#ff0000' },
+      ]);
+
+      mockWs!.simulateMessage({
+        type: 'cursor',
+        documentId: 'test-doc',
+        userId: 'u1',
+        displayName: 'Alice',
+        color: '#ff0000',
+        cursor: { blockIndex: 0, offset: 5 },
+        anchor: { blockIndex: 0, offset: 0 },
+      });
+
+      const users = client.getRemoteUsers();
+      expect(users[0].cursor).toEqual({ blockIndex: 0, offset: 5 });
+      expect(users[0].anchor).toEqual({ blockIndex: 0, offset: 0 });
+    });
+
+    it('should default anchor to null when not present in cursor message', async () => {
+      const editor = createEditor(makeDoc([makeBlock('Hello')]));
+      const { client } = setupCollab(editor);
+      await connectAndJoin(client, 0, [
+        { userId: 'u1', displayName: 'Alice', color: '#ff0000' },
+      ]);
+
+      // Send cursor message WITHOUT anchor field (backward compat)
+      mockWs!.simulateMessage({
+        type: 'cursor',
+        documentId: 'test-doc',
+        userId: 'u1',
+        displayName: 'Alice',
+        color: '#ff0000',
+        cursor: { blockIndex: 0, offset: 3 },
+      });
+
+      const users = client.getRemoteUsers();
+      expect(users[0].cursor).toEqual({ blockIndex: 0, offset: 3 });
+      expect(users[0].anchor).toBeNull();
+    });
+
+    it('should send anchor position with cursor updates', async () => {
+      const editor = createEditor(makeDoc([makeBlock('Hello')]));
+      const { client } = setupCollab(editor);
+      await connectAndJoin(client, 0);
+
+      // Wait for debounced cursor to be sent
+      await new Promise(r => setTimeout(r, 100));
+
+      // Find cursor messages sent
+      const cursorMsgs = mockWs!.getSentMessages().filter(m => m.type === 'cursor');
+      expect(cursorMsgs.length).toBeGreaterThan(0);
+
+      // All cursor messages should include an anchor field
+      for (const msg of cursorMsgs) {
+        expect(msg).toHaveProperty('anchor');
+      }
+    });
   });
 
   describe('local operations (OT protocol)', () => {

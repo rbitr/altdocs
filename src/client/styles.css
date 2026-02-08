@@ -1130,6 +1130,13 @@ body {
   font-weight: 500;
 }
 
+.remote-cursor-selection {
+  position: absolute;
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 9;
+}
+
 /* === Share panel === */
 
 .share-btn {
