@@ -1,0 +1,548 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import express from 'express';
+import http from 'http';
+import { WebSocket } from 'ws';
+import { apiRouter } from '../src/server/api.js';
+import { authRouter, optionalAuth } from '../src/server/auth.js';
+import { CollaborationServer } from '../src/server/websocket.js';
+import { resetStore, useMemoryDb, createUser, createSession, createDocument } from '../src/server/db.js';
+import type { ServerMessage, ClientMessage } from '../src/server/websocket.js';
+
+let httpServer: http.Server;
+let collabServer: CollaborationServer;
+let wsUrl: string;
+
+function createTestApp() {
+  const app = express();
+  app.use(express.json());
+  app.use(optionalAuth);
+  app.use(authRouter);
+  app.use(apiRouter);
+  return app;
+}
+
+beforeAll(async () => {
+  useMemoryDb();
+  const app = createTestApp();
+  httpServer = http.createServer(app);
+  collabServer = new CollaborationServer(httpServer);
+
+  await new Promise<void>((resolve) => {
+    httpServer.listen(0, () => {
+      const addr = httpServer.address();
+      if (typeof addr === 'object' && addr) {
+        wsUrl = `ws://localhost:${addr.port}`;
+      }
+      resolve();
+    });
+  });
+});
+
+afterAll(async () => {
+  collabServer.close();
+  await new Promise<void>((resolve) => {
+    httpServer.close(() => resolve());
+  });
+}, 15000);
+
+beforeEach(() => {
+  resetStore();
+});
+
+// ============================================================
+// Helpers
+// ============================================================
+
+function createTestUser(): { userId: string; token: string } {
+  const user = createUser('TestUser', '#ff0000');
+  const session = createSession(user.id);
+  return { userId: user.id, token: session.token };
+}
+
+function createTestDoc(title: string = 'Test Doc'): string {
+  const content = JSON.stringify([{
+    id: 'block_1',
+    type: 'paragraph',
+    alignment: 'left',
+    runs: [{ text: 'hello world', style: {} }],
+  }]);
+  const doc = createDocument(`doc_${Date.now()}_${Math.random()}`, title, content);
+  return doc.id;
+}
+
+function connectWs(token: string): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${wsUrl}?token=${token}`);
+    ws.on('open', () => resolve(ws));
+    ws.on('error', reject);
+  });
+}
+
+function waitForMessage(ws: WebSocket, timeout: number = 2000): Promise<ServerMessage> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timeout waiting for message')), timeout);
+    ws.once('message', (data) => {
+      clearTimeout(timer);
+      resolve(JSON.parse(data.toString()));
+    });
+  });
+}
+
+function sendMessage(ws: WebSocket, msg: ClientMessage): void {
+  ws.send(JSON.stringify(msg));
+}
+
+function closeWs(ws: WebSocket): Promise<void> {
+  return new Promise((resolve) => {
+    if (ws.readyState === WebSocket.CLOSED) {
+      resolve();
+      return;
+    }
+    ws.on('close', () => resolve());
+    ws.close();
+  });
+}
+
+/** Join a document and wait for the joined message. Returns the joined message. */
+async function joinDoc(ws: WebSocket, documentId: string): Promise<ServerMessage> {
+  const msgPromise = waitForMessage(ws);
+  sendMessage(ws, { type: 'join', documentId });
+  return msgPromise;
+}
+
+/**
+ * Set up two clients in the same document room.
+ * Returns after both have joined and ws1 has received ws2's user_joined.
+ */
+async function setupTwoClients(
+  docId: string
+): Promise<{ ws1: WebSocket; ws2: WebSocket; user1: { userId: string; token: string }; user2: { userId: string; token: string } }> {
+  const user1 = createTestUser();
+  const user2 = createTestUser();
+
+  const ws1 = await connectWs(user1.token);
+  await joinDoc(ws1, docId);
+
+  // Set up listener on ws1 BEFORE ws2 joins
+  const ws1UserJoined = waitForMessage(ws1);
+
+  const ws2 = await connectWs(user2.token);
+  const ws2Joined = waitForMessage(ws2);
+  sendMessage(ws2, { type: 'join', documentId: docId });
+
+  // Wait for both messages
+  await ws1UserJoined;
+  await ws2Joined;
+
+  return { ws1, ws2, user1, user2 };
+}
+
+// ============================================================
+// Tests
+// ============================================================
+
+describe('WebSocket: Authentication', () => {
+  it('rejects connection without token', async () => {
+    const ws = new WebSocket(wsUrl);
+    const closePromise = new Promise<{ code: number }>((resolve) => {
+      ws.on('close', (code) => resolve({ code }));
+    });
+    const msg = await waitForMessage(ws);
+    expect(msg.type).toBe('error');
+    const { code } = await closePromise;
+    expect(code).toBe(4001);
+  });
+
+  it('rejects connection with invalid token', async () => {
+    const ws = new WebSocket(`${wsUrl}?token=invalid_token`);
+    const closePromise = new Promise<{ code: number }>((resolve) => {
+      ws.on('close', (code) => resolve({ code }));
+    });
+    const msg = await waitForMessage(ws);
+    expect(msg.type).toBe('error');
+    const { code } = await closePromise;
+    expect(code).toBe(4001);
+  });
+
+  it('accepts connection with valid token', async () => {
+    const { token } = createTestUser();
+    const ws = await connectWs(token);
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    await closeWs(ws);
+  });
+});
+
+describe('WebSocket: Join Document', () => {
+  it('sends joined message when joining a document', async () => {
+    const { token } = createTestUser();
+    const docId = createTestDoc();
+    const ws = await connectWs(token);
+
+    const msg = await joinDoc(ws, docId);
+
+    expect(msg.type).toBe('joined');
+    if (msg.type === 'joined') {
+      expect(msg.documentId).toBe(docId);
+      expect(msg.version).toBe(0);
+      expect(msg.users).toEqual([]);
+    }
+
+    await closeWs(ws);
+  });
+
+  it('sends error when joining non-existent document', async () => {
+    const { token } = createTestUser();
+    const ws = await connectWs(token);
+
+    const msg = await joinDoc(ws, 'nonexistent');
+
+    expect(msg.type).toBe('error');
+    if (msg.type === 'error') {
+      expect(msg.message).toBe('Document not found');
+    }
+
+    await closeWs(ws);
+  });
+
+  it('notifies existing users when a new user joins', async () => {
+    const user1 = createTestUser();
+    const user2 = createTestUser();
+    const docId = createTestDoc();
+
+    const ws1 = await connectWs(user1.token);
+    await joinDoc(ws1, docId);
+
+    // Set up listener on ws1 BEFORE ws2 joins
+    const ws1Msg = waitForMessage(ws1);
+
+    const ws2 = await connectWs(user2.token);
+    const ws2Msg = waitForMessage(ws2);
+    sendMessage(ws2, { type: 'join', documentId: docId });
+
+    // User 1 should receive user_joined
+    const msg = await ws1Msg;
+    expect(msg.type).toBe('user_joined');
+    if (msg.type === 'user_joined') {
+      expect(msg.userId).toBe(user2.userId);
+      expect(msg.documentId).toBe(docId);
+    }
+
+    // User 2 should receive joined with user1 in users list
+    const joinedMsg = await ws2Msg;
+    expect(joinedMsg.type).toBe('joined');
+    if (joinedMsg.type === 'joined') {
+      expect(joinedMsg.users.length).toBe(1);
+      expect(joinedMsg.users[0].userId).toBe(user1.userId);
+    }
+
+    await closeWs(ws1);
+    await closeWs(ws2);
+  });
+
+  it('notifies other users when a user leaves', async () => {
+    const docId = createTestDoc();
+    const { ws1, ws2, user2 } = await setupTwoClients(docId);
+
+    // Set up listener for user_left BEFORE disconnect
+    const leftMsg = waitForMessage(ws1);
+
+    // User 2 disconnects
+    await closeWs(ws2);
+
+    // User 1 should receive user_left
+    const msg = await leftMsg;
+    expect(msg.type).toBe('user_left');
+    if (msg.type === 'user_left') {
+      expect(msg.userId).toBe(user2.userId);
+    }
+
+    await closeWs(ws1);
+  });
+});
+
+describe('WebSocket: Operations', () => {
+  it('acknowledges an operation from sender', async () => {
+    const { token } = createTestUser();
+    const docId = createTestDoc();
+    const ws = await connectWs(token);
+
+    await joinDoc(ws, docId);
+
+    sendMessage(ws, {
+      type: 'operation',
+      documentId: docId,
+      clientId: 'client1',
+      version: 0,
+      operation: {
+        type: 'insert_text',
+        position: { blockIndex: 0, offset: 0 },
+        text: 'Hello',
+      },
+    });
+
+    const msg = await waitForMessage(ws);
+    expect(msg.type).toBe('ack');
+    if (msg.type === 'ack') {
+      expect(msg.version).toBe(1);
+      expect(msg.documentId).toBe(docId);
+    }
+
+    await closeWs(ws);
+  });
+
+  it('broadcasts operation to other clients', async () => {
+    const docId = createTestDoc();
+    const { ws1, ws2, user1 } = await setupTwoClients(docId);
+
+    // Set up listeners BEFORE sending operation
+    const ws1Ack = waitForMessage(ws1);
+    const ws2Op = waitForMessage(ws2);
+
+    // User 1 sends an operation
+    sendMessage(ws1, {
+      type: 'operation',
+      documentId: docId,
+      clientId: 'client1',
+      version: 0,
+      operation: {
+        type: 'insert_text',
+        position: { blockIndex: 0, offset: 0 },
+        text: 'Test',
+      },
+    });
+
+    // User 1 gets ack
+    const ack = await ws1Ack;
+    expect(ack.type).toBe('ack');
+
+    // User 2 gets the operation
+    const opMsg = await ws2Op;
+    expect(opMsg.type).toBe('operation');
+    if (opMsg.type === 'operation') {
+      expect(opMsg.operation.type).toBe('insert_text');
+      expect(opMsg.version).toBe(1);
+      expect(opMsg.userId).toBe(user1.userId);
+    }
+
+    await closeWs(ws1);
+    await closeWs(ws2);
+  });
+
+  it('transforms operations against server history', async () => {
+    const docId = createTestDoc();
+    const { ws1, ws2 } = await setupTwoClients(docId);
+
+    // Set up listeners for operation + ack
+    const ws1Ack1 = waitForMessage(ws1);
+    const ws2Op1 = waitForMessage(ws2);
+
+    // User 1 sends an operation (insert at offset 0)
+    sendMessage(ws1, {
+      type: 'operation',
+      documentId: docId,
+      clientId: 'client1',
+      version: 0,
+      operation: {
+        type: 'insert_text',
+        position: { blockIndex: 0, offset: 0 },
+        text: 'AB',
+      },
+    });
+    await ws1Ack1; // ack (version 1)
+    await ws2Op1; // operation broadcast
+
+    // Set up listeners for user 2's operation
+    const ws2Ack = waitForMessage(ws2);
+    const ws1Op2 = waitForMessage(ws1);
+
+    // User 2 sends an operation based on version 0 (hasn't seen user 1's op yet)
+    sendMessage(ws2, {
+      type: 'operation',
+      documentId: docId,
+      clientId: 'client2',
+      version: 0,
+      operation: {
+        type: 'insert_text',
+        position: { blockIndex: 0, offset: 5 },
+        text: 'X',
+      },
+    });
+
+    // User 2 gets ack
+    const ack = await ws2Ack;
+    expect(ack.type).toBe('ack');
+    if (ack.type === 'ack') {
+      expect(ack.version).toBe(2);
+    }
+
+    // User 1 gets the transformed operation
+    const opMsg = await ws1Op2;
+    expect(opMsg.type).toBe('operation');
+    if (opMsg.type === 'operation') {
+      expect(opMsg.operation.type).toBe('insert_text');
+      if (opMsg.operation.type === 'insert_text') {
+        // The insert at offset 5 should be shifted right by 2 (length of "AB")
+        expect(opMsg.operation.position.offset).toBe(7);
+      }
+    }
+
+    await closeWs(ws1);
+    await closeWs(ws2);
+  });
+
+  it('increments version with each operation', async () => {
+    const { token } = createTestUser();
+    const docId = createTestDoc();
+    const ws = await connectWs(token);
+
+    await joinDoc(ws, docId);
+
+    for (let i = 0; i < 3; i++) {
+      sendMessage(ws, {
+        type: 'operation',
+        documentId: docId,
+        clientId: 'client1',
+        version: i,
+        operation: {
+          type: 'insert_text',
+          position: { blockIndex: 0, offset: i },
+          text: String(i),
+        },
+      });
+      const ack = await waitForMessage(ws);
+      expect(ack.type).toBe('ack');
+      if (ack.type === 'ack') {
+        expect(ack.version).toBe(i + 1);
+      }
+    }
+
+    await closeWs(ws);
+  });
+});
+
+describe('WebSocket: Cursor Sharing', () => {
+  it('broadcasts cursor updates to other clients', async () => {
+    const docId = createTestDoc();
+    const { ws1, ws2, user1 } = await setupTwoClients(docId);
+
+    // Set up listener BEFORE sending cursor
+    const ws2Cursor = waitForMessage(ws2);
+
+    sendMessage(ws1, {
+      type: 'cursor',
+      documentId: docId,
+      cursor: { blockIndex: 0, offset: 5 },
+    });
+
+    const msg = await ws2Cursor;
+    expect(msg.type).toBe('cursor');
+    if (msg.type === 'cursor') {
+      expect(msg.userId).toBe(user1.userId);
+      expect(msg.cursor).toEqual({ blockIndex: 0, offset: 5 });
+      expect(msg.color).toBe('#ff0000');
+    }
+
+    await closeWs(ws1);
+    await closeWs(ws2);
+  });
+
+  it('broadcasts null cursor (user left text area)', async () => {
+    const docId = createTestDoc();
+    const { ws1, ws2 } = await setupTwoClients(docId);
+
+    // Set up listener BEFORE sending cursor
+    const ws2Cursor = waitForMessage(ws2);
+
+    sendMessage(ws1, {
+      type: 'cursor',
+      documentId: docId,
+      cursor: null,
+    });
+
+    const msg = await ws2Cursor;
+    expect(msg.type).toBe('cursor');
+    if (msg.type === 'cursor') {
+      expect(msg.cursor).toBeNull();
+    }
+
+    await closeWs(ws1);
+    await closeWs(ws2);
+  });
+});
+
+describe('WebSocket: Room Management', () => {
+  it('creates and cleans up rooms', async () => {
+    const { token } = createTestUser();
+    const docId = createTestDoc();
+    const ws = await connectWs(token);
+
+    await joinDoc(ws, docId);
+
+    expect(collabServer.getRoom(docId)).toBeDefined();
+
+    await closeWs(ws);
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(collabServer.getRoom(docId)).toBeUndefined();
+  });
+
+  it('room persists while at least one client is connected', async () => {
+    const docId = createTestDoc();
+    const { ws1, ws2 } = await setupTwoClients(docId);
+
+    // Set up listener for user_left BEFORE disconnect
+    const ws2Left = waitForMessage(ws2);
+
+    await closeWs(ws1);
+    await ws2Left; // wait for user_left event to be processed
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Room should still exist (user 2 is connected)
+    expect(collabServer.getRoom(docId)).toBeDefined();
+
+    await closeWs(ws2);
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(collabServer.getRoom(docId)).toBeUndefined();
+  });
+
+  it('user can switch rooms', async () => {
+    const user1 = createTestUser();
+    const user2 = createTestUser();
+    const docId1 = createTestDoc('Doc 1');
+    const docId2 = createTestDoc('Doc 2');
+
+    const ws1 = await connectWs(user1.token);
+    const ws2 = await connectWs(user2.token);
+
+    // Both join doc 1
+    await joinDoc(ws1, docId1);
+
+    const ws1UserJoined = waitForMessage(ws1);
+    const ws2Joined = waitForMessage(ws2);
+    sendMessage(ws2, { type: 'join', documentId: docId1 });
+    await ws1UserJoined;
+    await ws2Joined;
+
+    // Set up listeners BEFORE switching
+    const ws2Left = waitForMessage(ws2);
+    const ws1Joined2 = waitForMessage(ws1);
+
+    // User 1 switches to doc 2
+    sendMessage(ws1, { type: 'join', documentId: docId2 });
+
+    // User 2 should get user_left for doc 1
+    const leftMsg = await ws2Left;
+    expect(leftMsg.type).toBe('user_left');
+
+    // User 1 should get joined for doc 2
+    const joinedMsg = await ws1Joined2;
+    expect(joinedMsg.type).toBe('joined');
+    if (joinedMsg.type === 'joined') {
+      expect(joinedMsg.documentId).toBe(docId2);
+    }
+
+    await closeWs(ws1);
+    await closeWs(ws2);
+  });
+});

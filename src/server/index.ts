@@ -1,8 +1,10 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { apiRouter } from './api.js';
 import { authRouter, optionalAuth } from './auth.js';
+import { createCollaborationServer } from './websocket.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,8 +31,12 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(clientDir, 'index.html'));
 });
 
-app.listen(PORT, () => {
+// Create HTTP server and attach WebSocket collaboration server
+const server = http.createServer(app);
+const collaborationServer = createCollaborationServer(server);
+
+server.listen(PORT, () => {
   console.log(`AltDocs server running on http://localhost:${PORT}`);
 });
 
-export { app };
+export { app, server, collaborationServer };
