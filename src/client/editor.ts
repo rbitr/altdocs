@@ -450,22 +450,18 @@ export class Editor {
 
     // If current block is a void block (horizontal rule or image), delete it
     if (currentBlock && (currentBlock.type === 'horizontal-rule' || currentBlock.type === 'image')) {
+      const deleteOp: Operation = {
+        type: 'delete_block',
+        blockIndex: pos.blockIndex,
+      };
+      this.applyLocal(deleteOp);
       if (pos.blockIndex > 0) {
         const prevBlockLen = blockTextLength(this.doc.blocks[pos.blockIndex - 1]);
-        this.doc.blocks.splice(pos.blockIndex, 1);
         this.cursor = collapsedCursor({
           blockIndex: pos.blockIndex - 1,
           offset: prevBlockLen,
         });
-      } else if (this.doc.blocks.length > 1) {
-        // Void block is first — remove it and move to next block start
-        this.doc.blocks.splice(0, 1);
-        this.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
       } else {
-        // Only block — convert to empty paragraph
-        currentBlock.type = 'paragraph';
-        delete currentBlock.imageUrl;
-        currentBlock.runs = [{ text: '', style: {} }];
         this.cursor = collapsedCursor({ blockIndex: 0, offset: 0 });
       }
       this.render();
@@ -844,9 +840,13 @@ export class Editor {
         this.applyLocal(setImageOp);
         this.render();
       } catch {
-        // Upload failed — remove the image block
+        // Upload failed — remove the image block via operation
         if (this.doc.blocks[imageBlockIndex]?.type === 'image') {
-          this.doc.blocks.splice(imageBlockIndex, 1);
+          const deleteOp: Operation = {
+            type: 'delete_block',
+            blockIndex: imageBlockIndex,
+          };
+          this.applyLocal(deleteOp);
           this.cursor = collapsedCursor({
             blockIndex: Math.min(blockIndex, this.doc.blocks.length - 1),
             offset: 0,

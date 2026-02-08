@@ -144,6 +144,11 @@ export interface SetLineSpacingOp {
   lineSpacing: LineSpacing;
 }
 
+export interface DeleteBlockOp {
+  type: 'delete_block';
+  blockIndex: number;
+}
+
 export type Operation =
   | InsertTextOp
   | DeleteTextOp
@@ -156,7 +161,8 @@ export type Operation =
   | InsertBlockOp
   | SetIndentOp
   | SetImageOp
-  | SetLineSpacingOp;
+  | SetLineSpacingOp
+  | DeleteBlockOp;
 
 // ============================================================
 // Helper Functions
@@ -359,6 +365,8 @@ export function applyOperation(doc: Document, op: Operation): Document {
       return applySetImage(result, op);
     case 'set_line_spacing':
       return applySetLineSpacing(result, op);
+    case 'delete_block':
+      return applyDeleteBlock(result, op);
   }
 }
 
@@ -617,6 +625,22 @@ function applySetLineSpacing(doc: Document, op: SetLineSpacingOp): Document {
   const block = doc.blocks[op.blockIndex];
   if (!block) return doc;
   block.lineSpacing = op.lineSpacing;
+  return doc;
+}
+
+function applyDeleteBlock(doc: Document, op: DeleteBlockOp): Document {
+  if (op.blockIndex < 0 || op.blockIndex >= doc.blocks.length) return doc;
+  if (doc.blocks.length <= 1) {
+    // Can't delete the last block — convert to empty paragraph
+    doc.blocks[0] = {
+      id: doc.blocks[0].id,
+      type: 'paragraph',
+      alignment: 'left',
+      runs: [{ text: '', style: {} }],
+    };
+    return doc;
+  }
+  doc.blocks.splice(op.blockIndex, 1);
   return doc;
 }
 

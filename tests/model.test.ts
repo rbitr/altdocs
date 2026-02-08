@@ -1435,3 +1435,82 @@ describe('inline code formatting', () => {
     expect(stylesEqual({ bold: true, code: true }, { bold: true })).toBe(false);
   });
 });
+
+// ============================================================
+// delete_block operation
+// ============================================================
+
+describe('delete_block', () => {
+  it('removes a block from the document', () => {
+    const doc = makeDoc([
+      makeBlock('Hello'),
+      makeBlock('World'),
+      makeBlock('!'),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'delete_block',
+      blockIndex: 1,
+    });
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[0].runs[0].text).toBe('Hello');
+    expect(result.blocks[1].runs[0].text).toBe('!');
+  });
+
+  it('removes the first block', () => {
+    const doc = makeDoc([
+      makeBlock('First'),
+      makeBlock('Second'),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'delete_block',
+      blockIndex: 0,
+    });
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].runs[0].text).toBe('Second');
+  });
+
+  it('removes the last block in a multi-block document', () => {
+    const doc = makeDoc([
+      makeBlock('First'),
+      makeBlock('Last'),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'delete_block',
+      blockIndex: 1,
+    });
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].runs[0].text).toBe('First');
+  });
+
+  it('converts sole block to empty paragraph instead of deleting', () => {
+    const doc = makeDoc([
+      makeBlock('Only', 'horizontal-rule'),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'delete_block',
+      blockIndex: 0,
+    });
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].type).toBe('paragraph');
+    expect(result.blocks[0].runs[0].text).toBe('');
+  });
+
+  it('is a no-op for out-of-bounds index', () => {
+    const doc = makeDoc([makeBlock('Hello')]);
+    const result = applyOperation(doc, {
+      type: 'delete_block',
+      blockIndex: 5,
+    });
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].runs[0].text).toBe('Hello');
+  });
+
+  it('is a no-op for negative index', () => {
+    const doc = makeDoc([makeBlock('Hello'), makeBlock('World')]);
+    const result = applyOperation(doc, {
+      type: 'delete_block',
+      blockIndex: -1,
+    });
+    expect(result.blocks).toHaveLength(2);
+  });
+});

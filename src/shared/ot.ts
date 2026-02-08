@@ -30,6 +30,7 @@ import type {
   SetIndentOp,
   SetImageOp,
   SetLineSpacingOp,
+  DeleteBlockOp,
 } from './model.js';
 
 // ============================================================
@@ -153,6 +154,20 @@ function transformPositionAgainstInsertBlock(
   return { blockIndex: pos.blockIndex + 1, offset: pos.offset };
 }
 
+/** Transform a position against a delete_block operation. */
+function transformPositionAgainstDeleteBlock(
+  pos: Position,
+  deletedBlockIndex: number
+): Position {
+  if (pos.blockIndex < deletedBlockIndex) return { ...pos };
+  if (pos.blockIndex === deletedBlockIndex) {
+    // Position is in the deleted block — move to start of that index
+    // (which now points to the next block, or the previous block if at end)
+    return { blockIndex: deletedBlockIndex, offset: 0 };
+  }
+  return { blockIndex: pos.blockIndex - 1, offset: pos.offset };
+}
+
 /** Check if a position is strictly inside a range (not at the boundaries). */
 function isPositionWithinRange(pos: Position, range: Range): boolean {
   const afterStart = comparePositions(pos, range.start) > 0;
@@ -237,6 +252,8 @@ function transformWithPriority(
       return transformSetImage(op, other);
     case 'set_line_spacing':
       return transformSetLineSpacing(op, other);
+    case 'delete_block':
+      return transformDeleteBlock(op, other);
   }
 }
 
@@ -287,6 +304,14 @@ function transformInsertText(
       );
       return { ...op, position: newPos };
     }
+    case 'delete_block': {
+      if (op.position.blockIndex === other.blockIndex) {
+        // Inserting into a block that was deleted — no-op
+        return { ...op, text: '', position: { blockIndex: other.blockIndex, offset: 0 } };
+      }
+      const newPos = transformPositionAgainstDeleteBlock(op.position, other.blockIndex);
+      return { ...op, position: newPos };
+    }
     default:
       // Formatting, change_block_type, change_block_alignment don't affect positions
       return { ...op };
@@ -318,6 +343,17 @@ function transformDeleteText(op: DeleteTextOp, other: Operation): Operation {
     case 'insert_block': {
       const newRange = transformRange(op.range, (pos) =>
         transformPositionAgainstInsertBlock(pos, other.afterBlockIndex)
+      );
+      return { ...op, range: newRange };
+    }
+    case 'delete_block': {
+      // If the delete range is entirely in the deleted block, the delete becomes no-op
+      if (op.range.start.blockIndex === other.blockIndex && op.range.end.blockIndex === other.blockIndex) {
+        const noOpPos = { blockIndex: other.blockIndex, offset: 0 };
+        return { ...op, range: { start: noOpPos, end: noOpPos } };
+      }
+      const newRange = transformRange(op.range, (pos) =>
+        transformPositionAgainstDeleteBlock(pos, other.blockIndex)
       );
       return { ...op, range: newRange };
     }
@@ -476,6 +512,10 @@ function transformRangeAgainstOp(range: Range, other: Operation): Range {
       return transformRange(range, (pos) =>
         transformPositionAgainstInsertBlock(pos, other.afterBlockIndex)
       );
+    case 'delete_block':
+      return transformRange(range, (pos) =>
+        transformPositionAgainstDeleteBlock(pos, other.blockIndex)
+      );
     default:
       return { ...range };
   }
@@ -527,6 +567,14 @@ function transformSplitBlock(
       );
       return { ...op, position: newPos };
     }
+    case 'delete_block': {
+      if (op.position.blockIndex === other.blockIndex) {
+        // Splitting a deleted block — no-op (return split at same position, will be harmless)
+        return { ...op, position: { blockIndex: other.blockIndex, offset: 0 } };
+      }
+      const newPos = transformPositionAgainstDeleteBlock(op.position, other.blockIndex);
+      return { ...op, position: newPos };
+    }
     default:
       return { ...op };
   }
@@ -566,6 +614,20 @@ function transformMergeBlock(op: MergeBlockOp, other: Operation): Operation {
       if (other.afterBlockIndex === op.blockIndex - 1) {
         // New block inserted right before our merge target
         return { ...op, blockIndex: op.blockIndex + 1 };
+      }
+      return { ...op };
+    }
+    case 'delete_block': {
+      if (other.blockIndex < op.blockIndex) {
+        return { ...op, blockIndex: op.blockIndex - 1 };
+      }
+      if (other.blockIndex === op.blockIndex) {
+        // The block we're merging was deleted — no-op
+        return { ...op, blockIndex: 0 };
+      }
+      if (other.blockIndex === op.blockIndex - 1) {
+        // The block we're merging INTO was deleted — no-op
+        return { ...op, blockIndex: 0 };
       }
       return { ...op };
     }
@@ -636,6 +698,12 @@ function transformInsertBlockOp(
       }
       return { ...op };
     }
+    case 'delete_block': {
+      if (other.blockIndex <= op.afterBlockIndex) {
+        return { ...op, afterBlockIndex: Math.max(0, op.afterBlockIndex - 1) };
+      }
+      return { ...op };
+    }
     default:
       return { ...op };
   }
@@ -653,12 +721,17 @@ function transformBlockIndex(blockIndex: number, other: Operation): number {
       return blockIndex;
     }
     case 'merge_block': {
-      if (other.blockIndex < blockIndex) return blockIndex - 1;
-      if (other.blockIndex === blockIndex) return blockIndex - 1;
+      if (other.blockIndex < blockIndex) return Math.max(0, blockIndex - 1);
+      if (other.blockIndex === blockIndex) return Math.max(0, blockIndex - 1);
       return blockIndex;
     }
     case 'insert_block': {
       if (other.afterBlockIndex < blockIndex) return blockIndex + 1;
+      return blockIndex;
+    }
+    case 'delete_block': {
+      if (other.blockIndex < blockIndex) return blockIndex - 1;
+      if (other.blockIndex === blockIndex) return blockIndex; // target block deleted — index stays, op becomes harmless on apply
       return blockIndex;
     }
     default:
@@ -691,6 +764,54 @@ function transformSetImage(op: SetImageOp, other: Operation): SetImageOp {
 function transformSetLineSpacing(op: SetLineSpacingOp, other: Operation): SetLineSpacingOp {
   const newIndex = transformBlockIndex(op.blockIndex, other);
   return { ...op, blockIndex: newIndex };
+}
+
+// ============================================================
+// Transform delete_block against other operations
+// ============================================================
+
+function transformDeleteBlock(op: DeleteBlockOp, other: Operation): DeleteBlockOp {
+  switch (other.type) {
+    case 'split_block': {
+      if (other.position.blockIndex < op.blockIndex) {
+        return { ...op, blockIndex: op.blockIndex + 1 };
+      }
+      if (other.position.blockIndex === op.blockIndex) {
+        // Split happened in the block we're deleting — still delete the original block
+        return { ...op };
+      }
+      return { ...op };
+    }
+    case 'merge_block': {
+      if (other.blockIndex < op.blockIndex) {
+        return { ...op, blockIndex: op.blockIndex - 1 };
+      }
+      if (other.blockIndex === op.blockIndex) {
+        // The block was merged away — it's already gone, no-op
+        return { ...op, blockIndex: -1 };
+      }
+      return { ...op };
+    }
+    case 'insert_block': {
+      if (other.afterBlockIndex < op.blockIndex) {
+        return { ...op, blockIndex: op.blockIndex + 1 };
+      }
+      return { ...op };
+    }
+    case 'delete_block': {
+      if (other.blockIndex < op.blockIndex) {
+        return { ...op, blockIndex: op.blockIndex - 1 };
+      }
+      if (other.blockIndex === op.blockIndex) {
+        // Same block deleted by both — our delete becomes a no-op
+        // Use blockIndex -1 which will be out-of-bounds and ignored by applyDeleteBlock
+        return { ...op, blockIndex: -1 };
+      }
+      return { ...op };
+    }
+    default:
+      return { ...op };
+  }
 }
 
 // ============================================================

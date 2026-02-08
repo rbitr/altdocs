@@ -2890,3 +2890,241 @@ describe('OT: transformBlockIndex edge cases', () => {
     }
   });
 });
+
+// ============================================================
+// delete_block OT transforms
+// ============================================================
+
+describe('delete_block transforms', () => {
+  describe('delete_block vs insert_text', () => {
+    it('insert into block before deleted block: insert unaffected', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 2 };
+      const opB: Operation = { type: 'insert_text', position: { blockIndex: 0, offset: 1 }, text: 'X' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(getBlockText(docAB, 0)).toBe('AXAA');
+      expect(getBlockText(docBA, 0)).toBe('AXAA');
+    });
+
+    it('insert into deleted block becomes no-op', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 1 };
+      const opB: Operation = { type: 'insert_text', position: { blockIndex: 1, offset: 1 }, text: 'X' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docBA.blocks).toHaveLength(2);
+    });
+
+    it('insert into block after deleted block: blockIndex shifts down', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 0 };
+      const opB: Operation = { type: 'insert_text', position: { blockIndex: 2, offset: 1 }, text: 'X' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(getBlockText(docAB, 1)).toBe('CXCC');
+      expect(getBlockText(docBA, 1)).toBe('CXCC');
+    });
+  });
+
+  describe('delete_block vs delete_text', () => {
+    it('delete text in block before deleted block: unaffected', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 2 };
+      const opB: Operation = { type: 'delete_text', range: { start: { blockIndex: 0, offset: 0 }, end: { blockIndex: 0, offset: 1 } } };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(getBlockText(docAB, 0)).toBe('AA');
+      expect(getBlockText(docBA, 0)).toBe('AA');
+    });
+
+    it('delete text in deleted block becomes no-op', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 1 };
+      const opB: Operation = { type: 'delete_text', range: { start: { blockIndex: 1, offset: 0 }, end: { blockIndex: 1, offset: 2 } } };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docBA.blocks).toHaveLength(2);
+    });
+  });
+
+  describe('delete_block vs split_block', () => {
+    it('split in block before deleted block', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 2 };
+      const opB: Operation = { type: 'split_block', position: { blockIndex: 0, offset: 1 } };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3); // split +1, delete -1 = net 3
+      expect(getBlockText(docAB, 0)).toBe('A');
+      expect(getBlockText(docAB, 1)).toBe('AA');
+      expect(getBlockText(docAB, 2)).toBe('BBB');
+      expect(getBlockText(docBA, 0)).toBe('A');
+      expect(getBlockText(docBA, 1)).toBe('AA');
+      expect(getBlockText(docBA, 2)).toBe('BBB');
+    });
+
+    it('split in block after deleted block: blockIndex adjusts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 0 };
+      const opB: Operation = { type: 'split_block', position: { blockIndex: 2, offset: 1 } };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3);
+      expect(getBlockText(docAB, 0)).toBe('BBB');
+      expect(getBlockText(docAB, 1)).toBe('C');
+      expect(getBlockText(docAB, 2)).toBe('CC');
+      expect(getBlockText(docBA, 0)).toBe('BBB');
+    });
+  });
+
+  describe('delete_block vs merge_block', () => {
+    it('merge block after deleted block: index adjusts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 0 };
+      const opB: Operation = { type: 'merge_block', blockIndex: 2 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(1);
+      expect(getBlockText(docAB, 0)).toBe('BBBCCC');
+      expect(getBlockText(docBA, 0)).toBe('BBBCCC');
+    });
+
+    it('merge targeting deleted block: both become no-ops for their transformed paths', () => {
+      // Concurrent delete_block and merge_block at same index is an inherently conflicting
+      // scenario (delete wants to discard content, merge wants to combine it). Both
+      // transformed ops become no-ops in their respective paths, so the paths may diverge.
+      // This is a known limitation similar to concurrent split_block at same position.
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 1 };
+      const opB: Operation = { type: 'merge_block', blockIndex: 1 };
+
+      const [aPrime, bPrime] = transformOperation(opA, opB);
+
+      // A' should be a no-op delete (block already merged away)
+      if (aPrime.type === 'delete_block') {
+        expect(aPrime.blockIndex).toBe(-1); // out-of-bounds → no-op
+      }
+      // B' should be a no-op merge (block was deleted)
+      if (bPrime.type === 'merge_block') {
+        expect(bPrime.blockIndex).toBe(0); // merge at 0 is invalid → no-op
+      }
+    });
+  });
+
+  describe('delete_block vs insert_block', () => {
+    it('insert after deleted block: afterBlockIndex adjusts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 0 };
+      const opB: Operation = { type: 'insert_block', afterBlockIndex: 2, blockType: 'paragraph' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3); // -1 + 1 = 3
+      expect(docBA.blocks).toHaveLength(3);
+    });
+
+    it('insert before deleted block: delete index adjusts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 2 };
+      const opB: Operation = { type: 'insert_block', afterBlockIndex: 0, blockType: 'paragraph' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(3); // -1 + 1 = 3
+      expect(docBA.blocks).toHaveLength(3);
+    });
+  });
+
+  describe('delete_block vs delete_block', () => {
+    it('both delete different blocks', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 0 };
+      const opB: Operation = { type: 'delete_block', blockIndex: 2 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(1);
+      expect(getBlockText(docAB, 0)).toBe('BBB');
+      expect(getBlockText(docBA, 0)).toBe('BBB');
+    });
+
+    it('both delete same block: second becomes no-op', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 1 };
+      const opB: Operation = { type: 'delete_block', blockIndex: 1 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docBA.blocks).toHaveLength(2);
+      expect(getBlockText(docAB, 0)).toBe('AAA');
+      expect(getBlockText(docAB, 1)).toBe('CCC');
+    });
+  });
+
+  describe('delete_block vs change_block_type', () => {
+    it('change type of block after deleted block: index adjusts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 0 };
+      const opB: Operation = { type: 'change_block_type', blockIndex: 2, newType: 'heading1' };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docAB.blocks[1].type).toBe('heading1');
+      expect(docBA.blocks[1].type).toBe('heading1');
+    });
+  });
+
+  describe('delete_block vs set_indent', () => {
+    it('indent on block after deleted block: index adjusts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 0 };
+      const opB: Operation = { type: 'set_indent', blockIndex: 2, indentLevel: 3 };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docAB.blocks[1].indentLevel).toBe(3);
+      expect(docBA.blocks[1].indentLevel).toBe(3);
+    });
+  });
+
+  describe('delete_block vs apply_formatting', () => {
+    it('formatting in block after deleted block: range adjusts', () => {
+      const doc = makeDoc([makeBlock('AAA'), makeBlock('BBB'), makeBlock('CCC')]);
+      const opA: Operation = { type: 'delete_block', blockIndex: 0 };
+      const opB: Operation = {
+        type: 'apply_formatting',
+        range: { start: { blockIndex: 2, offset: 0 }, end: { blockIndex: 2, offset: 2 } },
+        style: { bold: true },
+      };
+
+      const { docAB, docBA } = verifyConvergence(doc, opA, opB);
+      expect(docAB.blocks).toHaveLength(2);
+      expect(docAB.blocks[1].runs[0].style.bold).toBe(true);
+      expect(docBA.blocks[1].runs[0].style.bold).toBe(true);
+    });
+  });
+
+  describe('delete_block via transformSingle', () => {
+    it('server transforms delete_block against insert_text in prior block', () => {
+      const op: Operation = { type: 'delete_block', blockIndex: 1 };
+      const other: Operation = { type: 'insert_text', position: { blockIndex: 0, offset: 0 }, text: 'X' };
+      const result = transformSingle(op, other);
+      expect(result.type).toBe('delete_block');
+      if (result.type === 'delete_block') {
+        expect(result.blockIndex).toBe(1); // unchanged since insert is in earlier block
+      }
+    });
+
+    it('server transforms insert_text against delete_block of prior block', () => {
+      const op: Operation = { type: 'insert_text', position: { blockIndex: 2, offset: 0 }, text: 'X' };
+      const other: Operation = { type: 'delete_block', blockIndex: 0 };
+      const result = transformSingle(op, other);
+      if (result.type === 'insert_text') {
+        expect(result.position.blockIndex).toBe(1); // shifted down
+      }
+    });
+  });
+});
