@@ -844,4 +844,159 @@ describe('WebSocket: Operation Error Cases', () => {
 
     await closeWs(ws);
   });
+
+  it('handles unknown message type gracefully', async () => {
+    const { token } = createTestUser();
+    const ws = await connectWs(token);
+
+    // Send a message with an unknown type
+    ws.send(JSON.stringify({ type: 'unknown_type', data: 'test' }));
+
+    // Should not crash the connection — wait briefly and verify
+    await new Promise(r => setTimeout(r, 100));
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+
+    await closeWs(ws);
+  });
+
+  it('handles empty JSON object gracefully', async () => {
+    const { token } = createTestUser();
+    const ws = await connectWs(token);
+
+    ws.send(JSON.stringify({}));
+
+    // Should not crash
+    await new Promise(r => setTimeout(r, 100));
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+
+    await closeWs(ws);
+  });
+
+  it('handles very large message without crashing', async () => {
+    const { token } = createTestUser();
+    const docId = createTestDoc();
+    const ws = await connectWs(token);
+    await joinDoc(ws, docId);
+
+    // Send operation with very large text
+    const largeText = 'A'.repeat(100_000);
+    sendMessage(ws, {
+      type: 'operation',
+      documentId: docId,
+      clientId: 'client1',
+      version: 0,
+      operation: {
+        type: 'insert_text',
+        position: { blockIndex: 0, offset: 0 },
+        text: largeText,
+      },
+    });
+
+    const msg = await waitForMessage(ws);
+    expect(msg.type).toBe('ack');
+
+    await closeWs(ws);
+  });
+
+  it('handles rapid sequential operations correctly', async () => {
+    const { token } = createTestUser();
+    const docId = createTestDoc();
+    const ws = await connectWs(token);
+    await joinDoc(ws, docId);
+
+    // Collect all messages into an array
+    const messages: ServerMessage[] = [];
+    const allReceived = new Promise<void>((resolve) => {
+      ws.on('message', (data) => {
+        messages.push(JSON.parse(data.toString()));
+        if (messages.length === 10) resolve();
+      });
+    });
+
+    // Send 10 rapid operations
+    for (let i = 0; i < 10; i++) {
+      sendMessage(ws, {
+        type: 'operation',
+        documentId: docId,
+        clientId: 'client1',
+        version: i,
+        operation: {
+          type: 'insert_text',
+          position: { blockIndex: 0, offset: i },
+          text: String(i),
+        },
+      });
+    }
+
+    await allReceived;
+
+    expect(messages.every(m => m.type === 'ack')).toBe(true);
+    // Versions should be 1 through 10
+    const versions = messages.map(m => m.type === 'ack' ? m.version : -1);
+    expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+    await closeWs(ws);
+  });
+});
+
+describe('WebSocket: Room Cleanup Edge Cases', () => {
+  it('cleans up room when last client disconnects', async () => {
+    const { token } = createTestUser();
+    const docId = createTestDoc();
+    const ws = await connectWs(token);
+    await joinDoc(ws, docId);
+
+    expect(collabServer.getRoom(docId)).toBeDefined();
+
+    await closeWs(ws);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Room should be cleaned up
+    expect(collabServer.getRoom(docId)).toBeUndefined();
+  });
+
+  it('does not leak rooms across multiple join/leave cycles', async () => {
+    const user1 = createTestUser();
+    const docId = createTestDoc();
+
+    // Join and leave 5 times — the specific room should be cleaned up each time
+    for (let i = 0; i < 5; i++) {
+      const ws = await connectWs(user1.token);
+      await joinDoc(ws, docId);
+      expect(collabServer.getRoom(docId)).toBeDefined();
+      await closeWs(ws);
+      await new Promise(r => setTimeout(r, 50));
+      expect(collabServer.getRoom(docId)).toBeUndefined();
+    }
+  });
+
+  it('preserves operation history for room with active clients', async () => {
+    const user1 = createTestUser();
+    const docId = createTestDoc();
+    const ws = await connectWs(user1.token);
+    await joinDoc(ws, docId);
+
+    // Send several operations
+    for (let i = 0; i < 5; i++) {
+      sendMessage(ws, {
+        type: 'operation',
+        documentId: docId,
+        clientId: 'client1',
+        version: i,
+        operation: {
+          type: 'insert_text',
+          position: { blockIndex: 0, offset: i },
+          text: 'x',
+        },
+      });
+      await waitForMessage(ws); // ack
+    }
+
+    const room = collabServer.getRoom(docId);
+    expect(room).toBeDefined();
+    expect(room!.operations.length).toBe(5);
+    expect(room!.version).toBe(5);
+
+    await closeWs(ws);
+  });
 });

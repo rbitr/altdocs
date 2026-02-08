@@ -382,4 +382,133 @@ describe('Upload Router', () => {
     const json2 = await res2.json() as { url: string };
     expect(json1.url).not.toBe(json2.url);
   });
+
+  it('ignores path traversal characters in user-supplied filename', async () => {
+    const boundary = '----TestBoundary';
+    const fileData = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    // Attempt path traversal in filename
+    const body = buildMultipartRequest(boundary, '../../../etc/passwd.jpg', 'image/jpeg', fileData);
+
+    const res = await fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+
+    expect(res.status).toBe(201);
+    const json = await res.json() as { url: string };
+    // Server generates a random hex filename, not using the user-supplied name
+    expect(json.url).toMatch(/^\/uploads\/[a-f0-9]+\.jpg$/);
+    // No path traversal in the output
+    expect(json.url).not.toContain('..');
+  });
+
+  it('rejects HTML content type (XSS vector)', async () => {
+    const boundary = '----TestBoundary';
+    const fileData = Buffer.from('<script>alert("xss")</script>');
+    const body = buildMultipartRequest(boundary, 'evil.html', 'text/html', fileData);
+
+    const res = await fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string };
+    expect(json.error).toContain('Unsupported file type');
+  });
+
+  it('rejects SVG content type (XSS vector)', async () => {
+    const boundary = '----TestBoundary';
+    const fileData = Buffer.from('<svg onload="alert(1)"></svg>');
+    const body = buildMultipartRequest(boundary, 'evil.svg', 'image/svg+xml', fileData);
+
+    const res = await fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string };
+    expect(json.error).toContain('Unsupported file type');
+  });
+
+  it('rejects application/javascript content type', async () => {
+    const boundary = '----TestBoundary';
+    const fileData = Buffer.from('alert(1)');
+    const body = buildMultipartRequest(boundary, 'evil.js', 'application/javascript', fileData);
+
+    const res = await fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects request with no Content-Type header', async () => {
+    const res = await fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      body: Buffer.from('data'),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string };
+    expect(json.error).toContain('multipart/form-data');
+  });
+
+  it('accepts JPEG even if file extension in filename does not match', async () => {
+    const boundary = '----TestBoundary';
+    const fileData = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    // Extension says .png but Content-Type says image/jpeg
+    const body = buildMultipartRequest(boundary, 'image.png', 'image/jpeg', fileData);
+
+    const res = await fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+
+    expect(res.status).toBe(201);
+    const json = await res.json() as { url: string };
+    // Extension determined by Content-Type, not original filename
+    expect(json.url).toMatch(/\.jpg$/);
+  });
+
+  it('handles filename with special characters', async () => {
+    const boundary = '----TestBoundary';
+    const fileData = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const body = buildMultipartRequest(boundary, 'photo (1) [copy].png', 'image/png', fileData);
+
+    const res = await fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+
+    expect(res.status).toBe(201);
+    const json = await res.json() as { url: string };
+    // Server generates a safe random filename regardless
+    expect(json.url).toMatch(/^\/uploads\/[a-f0-9]+\.png$/);
+  });
+
+  it('handles filename with null bytes', async () => {
+    const boundary = '----TestBoundary';
+    const fileData = Buffer.from([0xff, 0xd8, 0xff]);
+    const body = buildMultipartRequest(boundary, 'evil\x00.jpg', 'image/jpeg', fileData);
+
+    const res = await fetch(`${baseUrl}/api/uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+
+    // Should still succeed since filename is ignored for storage
+    expect(res.status).toBe(201);
+    const json = await res.json() as { url: string };
+    expect(json.url).toMatch(/^\/uploads\/[a-f0-9]+\.jpg$/);
+  });
 });

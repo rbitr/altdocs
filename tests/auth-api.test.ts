@@ -185,5 +185,139 @@ describe('Auth API', () => {
       const body = await res.json();
       expect(body.display_name.length).toBe(50);
     });
+
+    it('rejects whitespace-only display name', async () => {
+      const sessionRes = await fetch(`${baseUrl}/api/auth/session`, { method: 'POST' });
+      const session = await sessionRes.json();
+
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: JSON.stringify({ display_name: '   \t  ' }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('accepts display name with special characters', async () => {
+      const sessionRes = await fetch(`${baseUrl}/api/auth/session`, { method: 'POST' });
+      const session = await sessionRes.json();
+
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: JSON.stringify({ display_name: 'User <script>alert(1)</script>' }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      // Should store as-is (sanitization happens at render time)
+      expect(body.display_name).toBe('User <script>alert(1)</script>');
+    });
+
+    it('accepts display name with unicode characters', async () => {
+      const sessionRes = await fetch(`${baseUrl}/api/auth/session`, { method: 'POST' });
+      const session = await sessionRes.json();
+
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: JSON.stringify({ display_name: 'ユーザー名 🎉' }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.display_name).toBe('ユーザー名 🎉');
+    });
+
+    it('rejects non-string display_name (number)', async () => {
+      const sessionRes = await fetch(`${baseUrl}/api/auth/session`, { method: 'POST' });
+      const session = await sessionRes.json();
+
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: JSON.stringify({ display_name: 12345 }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects non-string display_name (boolean)', async () => {
+      const sessionRes = await fetch(`${baseUrl}/api/auth/session`, { method: 'POST' });
+      const session = await sessionRes.json();
+
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: JSON.stringify({ display_name: true }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('trims leading/trailing whitespace from display name', async () => {
+      const sessionRes = await fetch(`${baseUrl}/api/auth/session`, { method: 'POST' });
+      const session = await sessionRes.json();
+
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: JSON.stringify({ display_name: '  Alice  ' }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.display_name).toBe('Alice');
+    });
+  });
+
+  describe('optionalAuth middleware edge cases', () => {
+    it('ignores Authorization header without Bearer prefix', async () => {
+      const sessionRes = await fetch(`${baseUrl}/api/auth/session`, { method: 'POST' });
+      const session = await sessionRes.json();
+
+      // Use "Token" prefix instead of "Bearer"
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        headers: { Authorization: `Token ${session.token}` },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('ignores Authorization header with lowercase bearer', async () => {
+      const sessionRes = await fetch(`${baseUrl}/api/auth/session`, { method: 'POST' });
+      const session = await sessionRes.json();
+
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        headers: { Authorization: `bearer ${session.token}` },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('ignores Authorization header with just "Bearer" and no token', async () => {
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        headers: { Authorization: 'Bearer ' },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('ignores empty Authorization header', async () => {
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        headers: { Authorization: '' },
+      });
+      expect(res.status).toBe(401);
+    });
   });
 });
