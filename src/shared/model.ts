@@ -23,6 +23,8 @@ export interface TextStyle {
   code?: boolean;
   fontSize?: number;
   fontFamily?: string;
+  color?: string;
+  backgroundColor?: string;
 }
 
 export interface TextRun {
@@ -148,7 +150,9 @@ export function stylesEqual(a: TextStyle, b: TextStyle): boolean {
     !!a.strikethrough === !!b.strikethrough &&
     !!a.code === !!b.code &&
     (a.fontSize || undefined) === (b.fontSize || undefined) &&
-    (a.fontFamily || undefined) === (b.fontFamily || undefined)
+    (a.fontFamily || undefined) === (b.fontFamily || undefined) &&
+    (a.color || undefined) === (b.color || undefined) &&
+    (a.backgroundColor || undefined) === (b.backgroundColor || undefined)
   );
 }
 
@@ -163,6 +167,8 @@ function applyStyleDelta(base: TextStyle, delta: Partial<TextStyle>): TextStyle 
     code: delta.code !== undefined ? delta.code : base.code,
     fontSize: delta.fontSize !== undefined ? delta.fontSize : base.fontSize,
     fontFamily: delta.fontFamily !== undefined ? delta.fontFamily : base.fontFamily,
+    color: delta.color !== undefined ? delta.color : base.color,
+    backgroundColor: delta.backgroundColor !== undefined ? delta.backgroundColor : base.backgroundColor,
   };
 }
 
@@ -176,6 +182,8 @@ function removeStyleDelta(base: TextStyle, delta: Partial<TextStyle>): TextStyle
     code: delta.code !== undefined ? false : base.code,
     fontSize: delta.fontSize !== undefined ? undefined : base.fontSize,
     fontFamily: delta.fontFamily !== undefined ? undefined : base.fontFamily,
+    color: delta.color !== undefined ? undefined : base.color,
+    backgroundColor: delta.backgroundColor !== undefined ? undefined : base.backgroundColor,
   };
 }
 

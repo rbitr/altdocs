@@ -131,6 +131,32 @@ describe('helper functions', () => {
     it('treats undefined fontFamily as equal to no fontFamily', () => {
       expect(stylesEqual({ fontFamily: undefined }, {})).toBe(true);
     });
+
+    it('detects different colors', () => {
+      expect(stylesEqual({ color: '#ff0000' }, {})).toBe(false);
+      expect(stylesEqual({ color: '#ff0000' }, { color: '#00ff00' })).toBe(false);
+    });
+
+    it('matches identical colors', () => {
+      expect(stylesEqual({ color: '#ff0000' }, { color: '#ff0000' })).toBe(true);
+    });
+
+    it('treats undefined color as equal to no color', () => {
+      expect(stylesEqual({ color: undefined }, {})).toBe(true);
+    });
+
+    it('detects different background colors', () => {
+      expect(stylesEqual({ backgroundColor: '#ffff00' }, {})).toBe(false);
+      expect(stylesEqual({ backgroundColor: '#ffff00' }, { backgroundColor: '#00ffff' })).toBe(false);
+    });
+
+    it('matches identical background colors', () => {
+      expect(stylesEqual({ backgroundColor: '#ffff00' }, { backgroundColor: '#ffff00' })).toBe(true);
+    });
+
+    it('treats undefined backgroundColor as equal to no backgroundColor', () => {
+      expect(stylesEqual({ backgroundColor: undefined }, {})).toBe(true);
+    });
   });
 
   describe('normalizeRuns', () => {
@@ -504,6 +530,68 @@ describe('apply_formatting operation', () => {
     expect(result.blocks[0].runs[0].style.fontFamily).toBe('Arial');
   });
 
+  it('applies color to a range', () => {
+    const doc = makeDoc([makeBlock('hello world')]);
+    const result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { color: '#c0392b' },
+    });
+    expect(result.blocks[0].runs[0].text).toBe('hello');
+    expect(result.blocks[0].runs[0].style.color).toBe('#c0392b');
+    expect(result.blocks[0].runs[1].text).toBe(' world');
+    expect(result.blocks[0].runs[1].style.color).toBeUndefined();
+  });
+
+  it('applies backgroundColor to a range', () => {
+    const doc = makeDoc([makeBlock('hello world')]);
+    const result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { backgroundColor: '#ffff00' },
+    });
+    expect(result.blocks[0].runs[0].text).toBe('hello');
+    expect(result.blocks[0].runs[0].style.backgroundColor).toBe('#ffff00');
+    expect(result.blocks[0].runs[1].text).toBe(' world');
+    expect(result.blocks[0].runs[1].style.backgroundColor).toBeUndefined();
+  });
+
+  it('applies color and backgroundColor together', () => {
+    const doc = makeDoc([makeBlock('hello')]);
+    const result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { color: '#ff0000', backgroundColor: '#ffff00' },
+    });
+    expect(result.blocks[0].runs[0].style.color).toBe('#ff0000');
+    expect(result.blocks[0].runs[0].style.backgroundColor).toBe('#ffff00');
+  });
+
+  it('preserves color when applying bold', () => {
+    const doc = makeDoc([
+      makeStyledBlock([{ text: 'hello', style: { color: '#ff0000' } }]),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'apply_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { bold: true },
+    });
+    expect(result.blocks[0].runs[0].style.bold).toBe(true);
+    expect(result.blocks[0].runs[0].style.color).toBe('#ff0000');
+  });
+
   it('preserves fontSize when applying bold', () => {
     const doc = makeDoc([
       makeStyledBlock([{ text: 'hello', style: { fontSize: 24 } }]),
@@ -588,6 +676,38 @@ describe('remove_formatting operation', () => {
       style: { fontFamily: '' },
     });
     expect(result.blocks[0].runs[0].style.fontFamily).toBeUndefined();
+    expect(result.blocks[0].runs[0].style.italic).toBe(true);
+  });
+
+  it('removes color from a range', () => {
+    const doc = makeDoc([
+      makeStyledBlock([{ text: 'hello', style: { color: '#ff0000', bold: true } }]),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'remove_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { color: '' },
+    });
+    expect(result.blocks[0].runs[0].style.color).toBeUndefined();
+    expect(result.blocks[0].runs[0].style.bold).toBe(true);
+  });
+
+  it('removes backgroundColor from a range', () => {
+    const doc = makeDoc([
+      makeStyledBlock([{ text: 'hello', style: { backgroundColor: '#ffff00', italic: true } }]),
+    ]);
+    const result = applyOperation(doc, {
+      type: 'remove_formatting',
+      range: {
+        start: { blockIndex: 0, offset: 0 },
+        end: { blockIndex: 0, offset: 5 },
+      },
+      style: { backgroundColor: '' },
+    });
+    expect(result.blocks[0].runs[0].style.backgroundColor).toBeUndefined();
     expect(result.blocks[0].runs[0].style.italic).toBe(true);
   });
 });

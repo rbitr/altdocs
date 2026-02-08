@@ -290,6 +290,61 @@ describe('renderDocument', () => {
       expect(span!.style.fontSize).toBe('');
     });
 
+    it('renders text with color', () => {
+      const doc = makeDoc([
+        makeStyledBlock([{ text: 'red text', style: { color: '#ff0000' } }]),
+      ]);
+      renderDocument(doc, container);
+      const span = container.querySelector('span');
+      expect(span!.style.color).toBe('rgb(255, 0, 0)');
+    });
+
+    it('renders text with backgroundColor', () => {
+      const doc = makeDoc([
+        makeStyledBlock([{ text: 'highlighted', style: { backgroundColor: '#ffff00' } }]),
+      ]);
+      renderDocument(doc, container);
+      const span = container.querySelector('span');
+      expect(span!.style.backgroundColor).toBe('rgb(255, 255, 0)');
+    });
+
+    it('renders text with both color and backgroundColor', () => {
+      const doc = makeDoc([
+        makeStyledBlock([{ text: 'styled', style: { color: '#0000ff', backgroundColor: '#ffff00' } }]),
+      ]);
+      renderDocument(doc, container);
+      const span = container.querySelector('span');
+      expect(span!.style.color).toBe('rgb(0, 0, 255)');
+      expect(span!.style.backgroundColor).toBe('rgb(255, 255, 0)');
+    });
+
+    it('does not set color for unstyled text', () => {
+      const doc = makeDoc([
+        makeStyledBlock([{ text: 'plain', style: {} }]),
+      ]);
+      renderDocument(doc, container);
+      const span = container.querySelector('span');
+      expect(span!.style.color).toBe('');
+      expect(span!.style.backgroundColor).toBe('');
+    });
+
+    it('renders mixed color runs', () => {
+      const doc = makeDoc([
+        makeStyledBlock([
+          { text: 'normal ', style: {} },
+          { text: 'red', style: { color: '#ff0000' } },
+          { text: ' and ', style: {} },
+          { text: 'highlighted', style: { backgroundColor: '#00ff00' } },
+        ]),
+      ]);
+      renderDocument(doc, container);
+      const spans = container.querySelectorAll('span');
+      expect(spans[0].style.color).toBe('');
+      expect(spans[1].style.color).toBe('rgb(255, 0, 0)');
+      expect(spans[2].style.color).toBe('');
+      expect(spans[3].style.backgroundColor).toBe('rgb(0, 255, 0)');
+    });
+
     it('renders mixed font size runs', () => {
       const doc = makeDoc([
         makeStyledBlock([

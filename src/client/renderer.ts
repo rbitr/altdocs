@@ -30,6 +30,8 @@ function renderRun(run: TextRun, useCodeTag = false): HTMLElement {
   }
   if (run.style.fontSize) el.style.fontSize = `${run.style.fontSize}px`;
   if (run.style.fontFamily) el.style.fontFamily = run.style.fontFamily;
+  if (run.style.color) el.style.color = run.style.color;
+  if (run.style.backgroundColor) el.style.backgroundColor = run.style.backgroundColor;
 
   return el;
 }

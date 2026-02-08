@@ -451,6 +451,128 @@ describe('Editor - font size and family', () => {
   });
 });
 
+describe('Editor - text color and highlight color', () => {
+  it('applies text color to selection', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello world')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.applyColor('#ff0000');
+    expect(editor.doc.blocks[0].runs[0].text).toBe('hello');
+    expect(editor.doc.blocks[0].runs[0].style.color).toBe('#ff0000');
+    expect(editor.doc.blocks[0].runs[1].text).toBe(' world');
+    expect(editor.doc.blocks[0].runs[1].style.color).toBeUndefined();
+  });
+
+  it('applies background color to selection', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello world')]));
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.applyBackgroundColor('#ffff00');
+    expect(editor.doc.blocks[0].runs[0].text).toBe('hello');
+    expect(editor.doc.blocks[0].runs[0].style.backgroundColor).toBe('#ffff00');
+    expect(editor.doc.blocks[0].runs[1].text).toBe(' world');
+    expect(editor.doc.blocks[0].runs[1].style.backgroundColor).toBeUndefined();
+  });
+
+  it('does nothing when cursor is collapsed for color', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    editor.applyColor('#ff0000');
+    expect(editor.doc.blocks[0].runs[0].style.color).toBeUndefined();
+  });
+
+  it('does nothing when cursor is collapsed for backgroundColor', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    editor.applyBackgroundColor('#ffff00');
+    expect(editor.doc.blocks[0].runs[0].style.backgroundColor).toBeUndefined();
+  });
+
+  it('removes text color when undefined is passed', () => {
+    const editor = createEditor(
+      makeDoc([
+        {
+          id: 'b1',
+          type: 'paragraph',
+          alignment: 'left',
+          runs: [{ text: 'hello', style: { color: '#ff0000' } }],
+        },
+      ])
+    );
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.applyColor(undefined);
+    expect(editor.doc.blocks[0].runs[0].style.color).toBeUndefined();
+  });
+
+  it('removes background color when undefined is passed', () => {
+    const editor = createEditor(
+      makeDoc([
+        {
+          id: 'b1',
+          type: 'paragraph',
+          alignment: 'left',
+          runs: [{ text: 'hello', style: { backgroundColor: '#ffff00' } }],
+        },
+      ])
+    );
+    editor.cursor = {
+      anchor: { blockIndex: 0, offset: 0 },
+      focus: { blockIndex: 0, offset: 5 },
+    };
+    editor.applyBackgroundColor(undefined);
+    expect(editor.doc.blocks[0].runs[0].style.backgroundColor).toBeUndefined();
+  });
+
+  it('getActiveColor returns color at cursor', () => {
+    const editor = createEditor(
+      makeDoc([
+        {
+          id: 'b1',
+          type: 'paragraph',
+          alignment: 'left',
+          runs: [{ text: 'hello', style: { color: '#e74c3c' } }],
+        },
+      ])
+    );
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    expect(editor.getActiveColor()).toBe('#e74c3c');
+  });
+
+  it('getActiveBackgroundColor returns backgroundColor at cursor', () => {
+    const editor = createEditor(
+      makeDoc([
+        {
+          id: 'b1',
+          type: 'paragraph',
+          alignment: 'left',
+          runs: [{ text: 'hello', style: { backgroundColor: '#ffff00' } }],
+        },
+      ])
+    );
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    expect(editor.getActiveBackgroundColor()).toBe('#ffff00');
+  });
+
+  it('getActiveColor returns undefined for default text', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    expect(editor.getActiveColor()).toBeUndefined();
+  });
+
+  it('getActiveBackgroundColor returns undefined for default text', () => {
+    const editor = createEditor(makeDoc([makeBlock('hello')]));
+    editor.cursor = collapsedCursor({ blockIndex: 0, offset: 2 });
+    expect(editor.getActiveBackgroundColor()).toBeUndefined();
+  });
+});
+
 describe('Editor - complex sequences', () => {
   it('type, enter, type creates two blocks', () => {
     const editor = createEditor(makeDoc([makeBlock('')]));

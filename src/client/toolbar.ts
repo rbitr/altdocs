@@ -81,6 +81,19 @@ export class Toolbar {
 
     this.addSeparator();
 
+    // Color controls
+    const colorGroup = this.createGroup();
+    this.addColorPicker(colorGroup, 'text-color', 'A', 'Text Color', (color) => {
+      this.editor.applyColor(color);
+      this.editor.focus();
+    });
+    this.addColorPicker(colorGroup, 'highlight-color', 'H', 'Highlight Color', (color) => {
+      this.editor.applyBackgroundColor(color);
+      this.editor.focus();
+    });
+
+    this.addSeparator();
+
     // Insert group
     const insertGroup = this.createGroup();
     this.addButton(insertGroup, 'horizontal-rule', '—', 'Horizontal Rule', () => {
@@ -249,6 +262,107 @@ export class Toolbar {
     parent.appendChild(select);
   }
 
+  private addColorPicker(
+    parent: HTMLElement,
+    key: string,
+    label: string,
+    title: string,
+    onColorSelect: (color: string | undefined) => void
+  ): void {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'toolbar-color-picker';
+    wrapper.dataset.toolbarAction = key;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toolbar-btn toolbar-color-btn';
+    btn.title = title;
+    btn.textContent = label;
+    btn.dataset.toolbarAction = key + '-btn';
+
+    // Color indicator bar under the label
+    const indicator = document.createElement('span');
+    indicator.className = 'toolbar-color-indicator';
+    if (key === 'text-color') {
+      indicator.style.backgroundColor = '#000000';
+    } else {
+      indicator.style.backgroundColor = '#ffff00';
+    }
+    btn.appendChild(indicator);
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'toolbar-color-dropdown';
+    dropdown.style.display = 'none';
+
+    const colors = key === 'text-color'
+      ? [
+          '#000000', '#434343', '#666666', '#999999', '#cccccc',
+          '#c0392b', '#e74c3c', '#d35400', '#e67e22', '#f39c12',
+          '#27ae60', '#2ecc71', '#1abc9c', '#2980b9', '#3498db',
+          '#8e44ad', '#9b59b6', '#2c3e50', '#7f8c8d', '#95a5a6',
+        ]
+      : [
+          '#ffff00', '#ff9900', '#ff0000', '#ff00ff', '#cc99ff',
+          '#00ffff', '#00ff00', '#99ff99', '#99ccff', '#cccccc',
+          '#ffffff', '#ffcccc', '#ffe0cc', '#ffffcc', '#ccffcc',
+          '#ccffff', '#cce0ff', '#e0ccff', '#ffcce0', '#f0f0f0',
+        ];
+
+    for (const color of colors) {
+      const swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = 'toolbar-color-swatch';
+      swatch.style.backgroundColor = color;
+      swatch.title = color;
+      swatch.dataset.color = color;
+      swatch.addEventListener('mousedown', (e) => e.preventDefault());
+      swatch.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onColorSelect(color);
+        dropdown.style.display = 'none';
+      });
+      dropdown.appendChild(swatch);
+    }
+
+    // "Remove color" button
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'toolbar-color-remove';
+    removeBtn.textContent = key === 'text-color' ? 'Default' : 'None';
+    removeBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    removeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onColorSelect(undefined);
+      dropdown.style.display = 'none';
+    });
+    dropdown.appendChild(removeBtn);
+
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const isVisible = dropdown.style.display !== 'none';
+      // Close all other color dropdowns
+      this.container.querySelectorAll('.toolbar-color-dropdown').forEach((d) => {
+        (d as HTMLElement).style.display = 'none';
+      });
+      dropdown.style.display = isVisible ? 'none' : 'grid';
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('mousedown', (e) => {
+      if (!wrapper.contains(e.target as Node)) {
+        dropdown.style.display = 'none';
+      }
+    });
+
+    wrapper.appendChild(btn);
+    wrapper.appendChild(dropdown);
+    parent.appendChild(wrapper);
+  }
+
   updateActiveStates(): void {
     const formatting = this.editor.getActiveFormatting();
     const blockType = this.editor.getActiveBlockType();
@@ -284,6 +398,20 @@ export class Toolbar {
     if (fontFamilySelect) {
       const activeFontFamily = this.editor.getActiveFontFamily();
       fontFamilySelect.value = activeFontFamily || '';
+    }
+
+    // Update text color indicator
+    const textColorIndicator = this.container.querySelector('[data-toolbar-action="text-color"] .toolbar-color-indicator') as HTMLElement | null;
+    if (textColorIndicator) {
+      const activeColor = this.editor.getActiveColor();
+      textColorIndicator.style.backgroundColor = activeColor || '#000000';
+    }
+
+    // Update highlight color indicator
+    const highlightIndicator = this.container.querySelector('[data-toolbar-action="highlight-color"] .toolbar-color-indicator') as HTMLElement | null;
+    if (highlightIndicator) {
+      const activeBg = this.editor.getActiveBackgroundColor();
+      highlightIndicator.style.backgroundColor = activeBg || 'transparent';
     }
   }
 

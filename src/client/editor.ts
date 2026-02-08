@@ -634,6 +634,48 @@ export class Editor {
     this.render();
   }
 
+  /** Apply a text color to the current selection */
+  applyColor(color: string | undefined): void {
+    if (isCollapsed(this.cursor)) return;
+    this.pushHistory();
+    const range = getSelectionRange(this.cursor);
+    if (color === undefined) {
+      const op: Operation = { type: 'remove_formatting', range, style: { color: '' } };
+      this.doc = applyOperation(this.doc, op);
+    } else {
+      const op: Operation = { type: 'apply_formatting', range, style: { color } };
+      this.doc = applyOperation(this.doc, op);
+    }
+    this.render();
+  }
+
+  /** Apply a background/highlight color to the current selection */
+  applyBackgroundColor(backgroundColor: string | undefined): void {
+    if (isCollapsed(this.cursor)) return;
+    this.pushHistory();
+    const range = getSelectionRange(this.cursor);
+    if (backgroundColor === undefined) {
+      const op: Operation = { type: 'remove_formatting', range, style: { backgroundColor: '' } };
+      this.doc = applyOperation(this.doc, op);
+    } else {
+      const op: Operation = { type: 'apply_formatting', range, style: { backgroundColor } };
+      this.doc = applyOperation(this.doc, op);
+    }
+    this.render();
+  }
+
+  /** Get the active text color at cursor position (or undefined for default) */
+  getActiveColor(): string | undefined {
+    const formatting = this.getActiveFormatting();
+    return formatting.color;
+  }
+
+  /** Get the active background color at cursor position (or undefined for default) */
+  getActiveBackgroundColor(): string | undefined {
+    const formatting = this.getActiveFormatting();
+    return formatting.backgroundColor;
+  }
+
   /** Apply a font family to the current selection */
   applyFontFamily(family: string | undefined): void {
     if (isCollapsed(this.cursor)) return;
