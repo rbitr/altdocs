@@ -626,3 +626,198 @@ body {
   color: #c0392b;
   font-weight: 500;
 }
+
+/* Toolbar menu toggle (hidden by default, shown on mobile) */
+.toolbar-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 20px;
+  color: #444;
+  padding: 0;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+.toolbar-menu-toggle:hover {
+  background: #e0e0e0;
+}
+
+/* === Tablet: < 1024px === */
+@media (max-width: 1023px) {
+  #app {
+    max-width: 100%;
+    padding: 1.5rem;
+  }
+
+  .altdocs-toolbar {
+    gap: 4px;
+    padding: 6px 8px;
+  }
+
+  .toolbar-separator {
+    height: 20px;
+    margin: 0 2px;
+  }
+
+  .doc-list-header h1 {
+    font-size: 1.5rem;
+  }
+}
+
+/* === Mobile: < 768px === */
+@media (max-width: 767px) {
+  #app {
+    padding: 0.75rem;
+  }
+
+  /* Toolbar collapse on mobile */
+  .toolbar-menu-toggle {
+    display: inline-flex;
+  }
+
+  .altdocs-toolbar {
+    position: relative;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .altdocs-toolbar .toolbar-group,
+  .altdocs-toolbar .toolbar-separator {
+    display: none;
+  }
+
+  .altdocs-toolbar.toolbar-expanded .toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .altdocs-toolbar.toolbar-expanded .toolbar-separator {
+    display: block;
+  }
+
+  /* Touch-friendly button sizes */
+  .toolbar-btn {
+    min-width: 44px;
+    height: 44px;
+    font-size: 16px;
+    padding: 0 8px;
+  }
+
+  .toolbar-select {
+    height: 44px;
+    font-size: 14px;
+    padding: 0 6px;
+  }
+
+  .toolbar-color-swatch {
+    width: 32px;
+    height: 32px;
+  }
+
+  .toolbar-color-dropdown {
+    min-width: 180px;
+  }
+
+  .toolbar-color-remove {
+    padding: 8px;
+    font-size: 14px;
+  }
+
+  /* Editor area */
+  .altdocs-editor {
+    min-height: 250px;
+    padding: 0.75rem;
+    border-radius: 0 0 4px 4px;
+  }
+
+  .altdocs-editor h1 {
+    font-size: 1.5rem;
+  }
+
+  .altdocs-editor h2 {
+    font-size: 1.25rem;
+  }
+
+  .altdocs-editor h3 {
+    font-size: 1.1rem;
+  }
+
+  /* Document title */
+  .doc-title-input {
+    font-size: 1.25rem;
+    padding: 6px 0;
+  }
+
+  /* Status bar */
+  .status-bar {
+    padding: 6px 0;
+  }
+
+  /* Document list */
+  .doc-list-header {
+    margin-bottom: 1rem;
+  }
+
+  .doc-list-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .new-doc-btn {
+    padding: 10px 16px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  .doc-list-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .doc-item-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .doc-action-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    min-height: 44px;
+    flex: 1;
+    text-align: center;
+  }
+
+  /* Shortcuts panel */
+  .shortcuts-panel {
+    width: 95%;
+    max-height: 90vh;
+  }
+
+  .shortcuts-header {
+    padding: 12px 16px;
+  }
+
+  .shortcuts-body {
+    padding: 12px 16px;
+  }
+
+  /* Toast on mobile — full width at bottom */
+  .toast-container {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .toast {
+    max-width: 100%;
+  }
+}

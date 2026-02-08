@@ -20,9 +20,27 @@ export class Toolbar {
     this.container.className = 'altdocs-toolbar';
     this.container.setAttribute('role', 'toolbar');
 
+    this.addMenuToggle();
     this.buildToolbar();
     this.editor.onUpdate(() => this.updateActiveStates());
     this.updateActiveStates();
+  }
+
+  private addMenuToggle(): void {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'toolbar-menu-toggle';
+    toggle.textContent = '\u2630'; // hamburger icon ☰
+    toggle.title = 'Toggle toolbar';
+    toggle.setAttribute('aria-label', 'Toggle toolbar');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.addEventListener('mousedown', (e) => e.preventDefault());
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      const expanded = this.container.classList.toggle('toolbar-expanded');
+      toggle.setAttribute('aria-expanded', String(expanded));
+    });
+    this.container.appendChild(toggle);
   }
 
   private buildToolbar(): void {
