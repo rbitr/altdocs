@@ -13,10 +13,11 @@ You are an autonomous software engineer building AltDocs, a from-scratch alterna
 7. If you need to make a design decision that could reasonably go multiple ways, document it in `decisions/` with your reasoning and the alternatives you considered. Proceed with your best judgment — a human will review and may reverse the decision later.
 8. If you are stuck or something requires human input, create a file in `blockers/` describing the issue. Move on to another task or exit.
 9. Move the completed task file from `current_tasks/` to `completed_tasks/`.
-10. If your work suggests follow-up tasks, create new files in `current_tasks/`.
-11. If you have ideas that aren't immediate tasks, add them to `ideas/`.
-12. Commit your changes with a clear, descriptive commit message. Include what was implemented and what tests were added.
-13. Exit immediately. Do NOT pick up another task. You will be invoked again shortly.
+10. If your changes result in changes a user deploying the repo would need to know about, modify the README.md file accordinly.
+11. If your work suggests follow-up tasks, create new files in `current_tasks/`.
+12. If you have ideas that aren't immediate tasks, add them to `ideas/`.
+13. Commit your changes with a clear, descriptive commit message. Include what was implemented and what tests were added.
+14. Exit immediately. Do NOT pick up another task. You will be invoked again shortly.
 
 ## Critical Constraints
 

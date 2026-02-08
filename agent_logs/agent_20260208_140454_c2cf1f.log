@@ -1,0 +1,18 @@
+=== Starting agent run at Sun Feb  8 02:04:54 PM UTC 2026 on commit c2cf1f ===
+Task 025 is complete. Here's a summary of what was implemented:
+
+**Task 025: Client-Side WebSocket Integration**
+
+**What was built:**
+1. **Editor operation hooks** — Added `onOperation()` callback and `applyRemoteOperation()` to the Editor class, with `applyLocal()` replacing all 26 internal `applyOperation` calls to emit operations to listeners
+2. **CollaborationClient** (`src/client/collaboration.ts`) — Manages WebSocket connection and OT protocol per document session:
+   - Inflight + buffered ops array pattern for the OT client protocol
+   - Remote operations transformed against all pending local ops using `transformOperation()`
+   - Tracks remote user presence and cursor positions
+   - Debounced cursor position sync
+3. **Shared protocol types** (`src/shared/protocol.ts`) — Extracted `ClientMessage` and `ServerMessage` types from server to shared module so both client and server can use them
+4. **Main.ts integration** — Creates CollaborationClient on editor open, disconnects on navigate away, shows "Live" status indicator and remote user dots
+5. **Vite WebSocket proxy** — `/ws` path proxied to `ws://localhost:3000`
+
+**Tests:** 15 unit tests + 3 e2e tests, all 573 unit + 134 e2e passing.
+=== Agent run completed successfully at Sun Feb  8 02:16:55 PM UTC 2026 ===

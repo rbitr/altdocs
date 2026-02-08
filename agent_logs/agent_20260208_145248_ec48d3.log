@@ -1,0 +1,25 @@
+=== Starting agent run at Sun Feb  8 02:52:48 PM UTC 2026 on commit ec48d3 ===
+Task 030 is complete. Here's a summary of what was accomplished:
+
+**Task 030: Server-Side Content Validation & Model Hardening**
+
+1. **New file: `src/shared/validation.ts`** — `validateContent()` function that validates document content JSON conforms to the Block[] schema:
+   - JSON parsing validity
+   - Array type check
+   - Block structure (id, type, alignment, runs)
+   - Valid block types and alignment values
+   - Run structure (text, style)
+   - Style property types (boolean flags, number fontSize, string fontFamily/color/backgroundColor)
+
+2. **API integration** — POST and PUT `/api/documents` routes now validate content before persisting, returning 400 with descriptive errors for invalid content.
+
+3. **Model hardening**:
+   - `applyInsertBlock`: Added bounds clamping for `afterBlockIndex` to prevent out-of-bounds array insertion
+   - `applySplitBlock`: Fixed dead ternary `block.type === 'paragraph' ? 'paragraph' : 'paragraph'` → `'paragraph'`
+
+4. **Tests**: 730 unit tests passing (was 683):
+   - 41 new validation unit tests
+   - 4 new API integration tests for content validation  
+   - 2 new model tests for insert_block bounds checking
+   - Updated existing API and sharing-api tests to use valid Block[] content
+=== Agent run completed successfully at Sun Feb  8 03:00:25 PM UTC 2026 ===

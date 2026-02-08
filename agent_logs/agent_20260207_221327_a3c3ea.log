@@ -1,0 +1,27 @@
+=== Starting agent run at Sat Feb  7 10:13:27 PM UTC 2026 on commit a3c3ea ===
+Task 018 is complete. Here's a summary of what was implemented:
+
+**Task 018: Font Size and Font Family Support**
+
+**Model changes** (`src/shared/model.ts`):
+- Added `fontSize?: number` and `fontFamily?: string` to `TextStyle`
+- Updated `stylesEqual()` to compare font properties (treating undefined/falsy as equal)
+- Updated `applyStyleDelta()` to apply font size/family from delta
+- Updated `removeStyleDelta()` to clear font size/family (set to `undefined`)
+
+**Renderer** (`src/client/renderer.ts`):
+- `renderRun()` now applies `font-size` (in px) and `font-family` CSS to styled spans
+
+**Editor** (`src/client/editor.ts`):
+- `applyFontSize(size)` — applies font size to selection, or removes if undefined
+- `applyFontFamily(family)` — applies font family to selection, or removes if undefined
+- `getActiveFontSize()` / `getActiveFontFamily()` — reads current font at cursor position
+
+**Toolbar** (`src/client/toolbar.ts`):
+- Font size dropdown with presets: 8, 10, 12, 14, 18, 24, 36, 48
+- Font family dropdown with 8 web-safe fonts: Arial, Times New Roman, Courier New, Georgia, Verdana, Helvetica, Trebuchet MS, Comic Sans MS
+- Both dropdowns reflect the active font properties at cursor position
+- Default "Size" / "Font" label when no custom font is set
+
+**Tests**: 33 new unit tests + 8 new e2e tests (439 unit + 84 e2e total, all passing)
+=== Agent run completed successfully at Sat Feb  7 10:20:05 PM UTC 2026 ===

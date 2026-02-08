@@ -1,0 +1,21 @@
+=== Starting agent run at Sun Feb  8 04:22:19 PM UTC 2026 on commit 2a2e93 ===
+Task 039 is complete. Here's a summary of what was implemented:
+
+**Task 039: Line Spacing Controls**
+
+Added user-controllable line spacing as a per-block property with four presets: Single (1.0), 1.15, 1.5, and Double (2.0).
+
+**Changes made:**
+- **`src/shared/model.ts`**: Added `LineSpacing` type, `VALID_LINE_SPACINGS` constant, `lineSpacing` optional field on Block, `SetLineSpacingOp` operation, and `applySetLineSpacing` function. Updated `cloneBlock` and `split_block` to preserve lineSpacing.
+- **`src/shared/ot.ts`**: Added `transformSetLineSpacing` using `transformBlockIndex` (same pattern as set_indent, set_image).
+- **`src/shared/validation.ts`**: Added validation for lineSpacing field (must be one of the four valid values).
+- **`src/client/renderer.ts`**: Applies `line-height` inline style when lineSpacing is set.
+- **`src/client/editor.ts`**: Added `setLineSpacing()` and `getActiveLineSpacing()` methods.
+- **`src/client/toolbar.ts`**: Added line spacing select dropdown between indent and insert groups, with toolbar state sync.
+
+**Tests added:**
+- **51 unit tests** (`tests/line-spacing.test.ts`): covers model operations, OT transforms, convergence, renderer, editor methods, and validation.
+- **7 e2e tests** (`tests/e2e/line-spacing.spec.ts`): covers select dropdown, persistence, undo, mixed spacings.
+
+**All tests passing**: 1141 unit + 157 e2e = 1298 total.
+=== Agent run completed successfully at Sun Feb  8 04:32:21 PM UTC 2026 ===

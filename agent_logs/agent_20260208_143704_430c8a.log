@@ -1,0 +1,26 @@
+=== Starting agent run at Sun Feb  8 02:37:04 PM UTC 2026 on commit 430c8a ===
+Task 028 is complete. Here's a summary of what was done:
+
+**Task 028: WebSocket Resilience — Heartbeat and Reconnection**
+
+### Server-side heartbeat (`src/server/websocket.ts`)
+- Added ping/pong heartbeat every 30 seconds using WebSocket protocol-level frames
+- Connections that don't respond to ping are terminated via `ws.terminate()`, cleaning up ghost users from rooms
+- `alive` map tracks liveness per connection; cleaned up on disconnect
+
+### Client-side reconnection (`src/client/collaboration.ts`)
+- Auto-reconnect with exponential backoff: 1s base, 2x multiplier, 30s cap
+- Backoff resets to base on successful WebSocket `open` event
+- Clears stale OT state (inflight + buffered operations) before reconnecting
+- Re-joins the document room on reconnection
+- `intentionalClose` flag prevents reconnection after explicit `disconnect()` call
+- `operationListenerAttached` flag prevents duplicate editor callback registration
+
+### Tests
+- 7 new tests added (6 reconnection + 1 heartbeat)
+- **637 unit tests** all passing (up from 630)
+- **143 e2e tests** all passing
+
+### OT audit findings
+- Investigated concurrent split_block and merge_block at same position — confirmed both converge correctly (documented in `decisions/028_ws_resilience.md`)
+=== Agent run completed successfully at Sun Feb  8 02:47:24 PM UTC 2026 ===

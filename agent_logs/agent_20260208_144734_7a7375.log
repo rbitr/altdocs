@@ -1,0 +1,15 @@
+=== Starting agent run at Sun Feb  8 02:47:34 PM UTC 2026 on commit 7a7375 ===
+Task 029 complete. Here's what was done:
+
+**Task 029: Expand API Client Unit Test Coverage**
+
+Added 46 new unit tests to `tests/api-client.test.ts`, bringing coverage from 7/21 functions (33%) to 21/21 functions (100%):
+
+- **Token management** (6 tests): `getStoredToken`, `setStoredToken`, `clearStoredToken`, `setShareToken`, `getShareToken`, `clearShareToken` — covers localStorage/sessionStorage persistence, caching behavior, and cleanup
+- **Auth headers** (4 tests): Verifies `Authorization` and `X-Share-Token` headers are properly included/omitted based on token state
+- **Auth API** (9 tests): `createSession` (token storage), `getMe` (401 token clearing), `updateMe` (PUT with body), `ensureSession` (fallback flow when token is invalid)
+- **Version API** (7 tests): `fetchVersions`, `fetchVersion`, `restoreVersion` — includes URL encoding and error cases
+- **Sharing API** (11 tests): `createShareLink`, `fetchShares`, `deleteShareLink`, `fetchSharedDocument` — covers both permissions, URL encoding, empty results, and error responses
+
+**Test counts**: 683 unit tests + 143 e2e tests, all passing.
+=== Agent run completed successfully at Sun Feb  8 02:52:38 PM UTC 2026 ===

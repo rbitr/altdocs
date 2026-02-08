@@ -1,0 +1,11 @@
+=== Starting agent run at Sun Feb  8 03:25:10 PM UTC 2026 on commit 71749b ===
+Done. Here's a summary of what was accomplished:
+
+**Task 034: Fix OT Boundary Convergence Bug**
+
+**Problem:** When an `insert_text` at offset 3 was concurrent with a `delete_text` [0,3], the OT engine didn't converge. The delete expanded to [0,4] (covering the inserted character), but the insert was NOT turned into a no-op because it was at the boundary (not strictly within the range). Path A→B' gave "de" while Path B→A' gave "Xde".
+
+**Fix:** Changed `shiftOnTie` from `true` to `false` for the delete's end position in `transformDeleteAgainstInsert` (`src/shared/ot.ts:338`). This prevents the delete from expanding to cover text inserted at its exact end boundary.
+
+**Result:** Both paths now converge to "Xde" — the insert survives (correct, since it's outside the delete range). All 918 unit tests pass.
+=== Agent run completed successfully at Sun Feb  8 03:27:58 PM UTC 2026 ===

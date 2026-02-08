@@ -1,0 +1,20 @@
+=== Starting agent run at Sun Feb  8 03:52:36 PM UTC 2026 on commit 894364 ===
+Task 036 is complete. Here's a summary of what was implemented:
+
+**Task 036: Block Indentation (P3 Feature)**
+
+Added block-level indentation support to AltDocs, enabling nested lists and general block indentation.
+
+**What was built:**
+- **Model**: Optional `indentLevel` field on `Block` (0-8 range), `getIndentLevel()` helper, `MAX_INDENT_LEVEL` constant
+- **Operation**: New `set_indent` operation with `applyOperation` support (clamps to valid range)
+- **OT Engine**: Transform support for `set_indent` using existing `transformBlockIndex` helper
+- **Renderer**: Nested list rendering via `listStack` — indented list items create nested `<ul>`/`<ol>`. Non-list blocks get `data-indent` attributes for CSS-based indentation
+- **Editor**: Tab indents, Shift+Tab outdents, `indent()`/`outdent()` public methods, `getActiveIndentLevel()`
+- **Toolbar**: Indent (→) and Outdent (←) buttons in new indent group
+- **CSS**: `margin-left` at 1.5em per indent level via `data-indent` attribute selectors; nested list sub-list margin cleanup
+- **Validation**: Accepts optional `indentLevel` (0-8 integer) for backward compatibility
+- **Shortcuts panel**: Tab and Shift+Tab entries added
+
+**Tests**: 51 unit tests + 7 e2e tests added. All 1028 unit tests and 150 e2e tests passing.
+=== Agent run completed successfully at Sun Feb  8 04:05:42 PM UTC 2026 ===
