@@ -98,6 +98,18 @@ describe('Document Store', () => {
     const parsed = JSON.parse(fetched!.content);
     expect(parsed[0].runs[0].text).toBe('Hello');
   });
+
+  it('creates a document with owner_id', () => {
+    const record = createDocument('doc1', 'Owned Doc', '[]', 'user_123');
+    expect(record.owner_id).toBe('user_123');
+    const fetched = getDocument('doc1');
+    expect(fetched!.owner_id).toBe('user_123');
+  });
+
+  it('creates a document with null owner_id when not provided', () => {
+    const record = createDocument('doc1', 'Legacy Doc', '[]');
+    expect(record.owner_id).toBeNull();
+  });
 });
 
 describe('Version History', () => {
@@ -168,6 +180,35 @@ describe('Version History', () => {
     expect(versions.length).toBe(1);
     expect(versions[0].version_number).toBe(1);
     expect(versions[0].title).toBe('Updated');
+  });
+
+  it('updateDocument does not create a version when nothing changed', () => {
+    createDocument('doc1', 'Test', '[]');
+    // Update with identical title and content
+    updateDocument('doc1', 'Test', '[]');
+
+    const versions = listVersions('doc1');
+    expect(versions.length).toBe(0);
+  });
+
+  it('updateDocument creates version only when title changes', () => {
+    createDocument('doc1', 'Test', '[]');
+    updateDocument('doc1', 'New Title', '[]');
+
+    const versions = listVersions('doc1');
+    expect(versions.length).toBe(1);
+    expect(versions[0].title).toBe('New Title');
+  });
+
+  it('updateDocument creates version only when content changes', () => {
+    createDocument('doc1', 'Test', '[]');
+    updateDocument('doc1', 'Test', '[1]');
+
+    const versions = listVersions('doc1');
+    expect(versions.length).toBe(1);
+    // listVersions doesn't include content; use getVersion for full data
+    const full = getVersion('doc1', versions[0].version_number);
+    expect(full!.content).toBe('[1]');
   });
 
   it('deleting a document also deletes its versions', () => {

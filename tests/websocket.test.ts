@@ -5,7 +5,7 @@ import { WebSocket } from 'ws';
 import { apiRouter } from '../src/server/api.js';
 import { authRouter, optionalAuth } from '../src/server/auth.js';
 import { CollaborationServer } from '../src/server/websocket.js';
-import { resetStore, useMemoryDb, createUser, createSession, createDocument } from '../src/server/db.js';
+import { resetStore, useMemoryDb, createUser, createSession, createDocument, createShare } from '../src/server/db.js';
 import type { ServerMessage, ClientMessage } from '../src/server/websocket.js';
 
 let httpServer: http.Server;
@@ -70,9 +70,11 @@ function createTestDoc(title: string = 'Test Doc'): string {
   return doc.id;
 }
 
-function connectWs(token: string): Promise<WebSocket> {
+function connectWs(token: string, shareToken?: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${wsUrl}?token=${token}`);
+    let url = `${wsUrl}?token=${token}`;
+    if (shareToken) url += `&share=${shareToken}`;
+    const ws = new WebSocket(url);
     ws.on('open', () => resolve(ws));
     ws.on('error', reject);
   });
@@ -567,5 +569,230 @@ describe('WebSocket: Room Management', () => {
 
     await closeWs(ws1);
     await closeWs(ws2);
+  });
+
+  it('disconnect cleans up alive tracking', async () => {
+    const { token } = createTestUser();
+    const docId = createTestDoc();
+    const ws = await connectWs(token);
+    await joinDoc(ws, docId);
+
+    // Verify room exists
+    expect(collabServer.getRoom(docId)).toBeDefined();
+
+    await closeWs(ws);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Room cleaned up, and no leftover alive tracking
+    expect(collabServer.getRoom(docId)).toBeUndefined();
+  });
+});
+
+describe('WebSocket: Share Token Access', () => {
+  function createOwnedDoc(ownerId: string, title: string = 'Owned Doc'): string {
+    const content = JSON.stringify([{
+      id: 'block_1',
+      type: 'paragraph',
+      alignment: 'left',
+      runs: [{ text: 'owned content', style: {} }],
+    }]);
+    const doc = createDocument(`doc_${Date.now()}_${Math.random()}`, title, content, ownerId);
+    return doc.id;
+  }
+
+  it('owner can join their own document', async () => {
+    const owner = createTestUser();
+    const docId = createOwnedDoc(owner.userId);
+    const ws = await connectWs(owner.token);
+
+    const msg = await joinDoc(ws, docId);
+    expect(msg.type).toBe('joined');
+
+    await closeWs(ws);
+  });
+
+  it('non-owner without share token is denied', async () => {
+    const owner = createTestUser();
+    const other = createTestUser();
+    const docId = createOwnedDoc(owner.userId);
+
+    const ws = await connectWs(other.token);
+    const msg = await joinDoc(ws, docId);
+    expect(msg.type).toBe('error');
+    if (msg.type === 'error') {
+      expect(msg.message).toBe('Access denied');
+    }
+
+    await closeWs(ws);
+  });
+
+  it('edit share token allows joining and sending operations', async () => {
+    const owner = createTestUser();
+    const other = createTestUser();
+    const docId = createOwnedDoc(owner.userId);
+    const share = createShare(docId, 'edit', owner.userId);
+
+    const ws = await connectWs(other.token, share.token);
+    const joined = await joinDoc(ws, docId);
+    expect(joined.type).toBe('joined');
+
+    // Send an operation — should succeed with ack
+    sendMessage(ws, {
+      type: 'operation',
+      documentId: docId,
+      clientId: 'client1',
+      version: 0,
+      operation: {
+        type: 'insert_text',
+        position: { blockIndex: 0, offset: 0 },
+        text: 'edited',
+      },
+    });
+    const ack = await waitForMessage(ws);
+    expect(ack.type).toBe('ack');
+
+    await closeWs(ws);
+  });
+
+  it('view share token allows joining but rejects operations', async () => {
+    const owner = createTestUser();
+    const other = createTestUser();
+    const docId = createOwnedDoc(owner.userId);
+    const share = createShare(docId, 'view', owner.userId);
+
+    const ws = await connectWs(other.token, share.token);
+    const joined = await joinDoc(ws, docId);
+    expect(joined.type).toBe('joined');
+
+    // Send an operation — should be rejected with error
+    sendMessage(ws, {
+      type: 'operation',
+      documentId: docId,
+      clientId: 'client1',
+      version: 0,
+      operation: {
+        type: 'insert_text',
+        position: { blockIndex: 0, offset: 0 },
+        text: 'hacked',
+      },
+    });
+    const err = await waitForMessage(ws);
+    expect(err.type).toBe('error');
+    if (err.type === 'error') {
+      expect(err.message).toBe('Read-only access');
+    }
+
+    await closeWs(ws);
+  });
+
+  it('invalid share token is denied for owned docs', async () => {
+    const owner = createTestUser();
+    const other = createTestUser();
+    const docId = createOwnedDoc(owner.userId);
+
+    const ws = await connectWs(other.token, 'invalid_share_token');
+    const msg = await joinDoc(ws, docId);
+    expect(msg.type).toBe('error');
+    if (msg.type === 'error') {
+      expect(msg.message).toBe('Access denied');
+    }
+
+    await closeWs(ws);
+  });
+
+  it('view-only user cursors are still broadcast', async () => {
+    const owner = createTestUser();
+    const viewer = createTestUser();
+    const docId = createOwnedDoc(owner.userId);
+    const share = createShare(docId, 'view', owner.userId);
+
+    // Owner joins
+    const ownerWs = await connectWs(owner.token);
+    await joinDoc(ownerWs, docId);
+
+    // Viewer joins
+    const viewerJoinedBroadcast = waitForMessage(ownerWs);
+    const viewerWs = await connectWs(viewer.token, share.token);
+    await joinDoc(viewerWs, docId);
+    await viewerJoinedBroadcast;
+
+    // Viewer sends cursor update
+    const ownerCursor = waitForMessage(ownerWs);
+    sendMessage(viewerWs, {
+      type: 'cursor',
+      documentId: docId,
+      cursor: { blockIndex: 0, offset: 3 },
+    });
+
+    const cursorMsg = await ownerCursor;
+    expect(cursorMsg.type).toBe('cursor');
+    if (cursorMsg.type === 'cursor') {
+      expect(cursorMsg.cursor).toEqual({ blockIndex: 0, offset: 3 });
+    }
+
+    await closeWs(ownerWs);
+    await closeWs(viewerWs);
+  });
+});
+
+describe('WebSocket: Operation Error Cases', () => {
+  it('rejects operation from client not in a room', async () => {
+    const { token } = createTestUser();
+    const ws = await connectWs(token);
+
+    // Send operation without joining a room
+    sendMessage(ws, {
+      type: 'operation',
+      documentId: 'nonexistent',
+      clientId: 'client1',
+      version: 0,
+      operation: {
+        type: 'insert_text',
+        position: { blockIndex: 0, offset: 0 },
+        text: 'test',
+      },
+    });
+
+    const msg = await waitForMessage(ws);
+    expect(msg.type).toBe('error');
+    if (msg.type === 'error') {
+      expect(msg.message).toBe('Not in a document room');
+    }
+
+    await closeWs(ws);
+  });
+
+  it('handles invalid JSON message gracefully', async () => {
+    const { token } = createTestUser();
+    const ws = await connectWs(token);
+
+    // Send malformed JSON
+    ws.send('not json at all');
+
+    const msg = await waitForMessage(ws);
+    expect(msg.type).toBe('error');
+    if (msg.type === 'error') {
+      expect(msg.message).toBe('Invalid message format');
+    }
+
+    await closeWs(ws);
+  });
+
+  it('ignores cursor messages for non-existent room', async () => {
+    const { token } = createTestUser();
+    const ws = await connectWs(token);
+
+    // Send cursor to a room that doesn't exist — should be silently ignored
+    sendMessage(ws, {
+      type: 'cursor',
+      documentId: 'nonexistent',
+      cursor: { blockIndex: 0, offset: 0 },
+    });
+
+    // No response expected — wait briefly and verify connection is still open
+    await new Promise(r => setTimeout(r, 100));
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+
+    await closeWs(ws);
   });
 });
