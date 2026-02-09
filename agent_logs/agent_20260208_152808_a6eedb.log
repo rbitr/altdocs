@@ -1,0 +1,20 @@
+=== Starting agent run at Sun Feb  8 03:28:08 PM UTC 2026 on commit a6eedb ===
+Task 035 is complete. Here's the summary:
+
+**Task 035: Main.ts Unit Test Coverage** — Committed as `8943645`
+
+Added `tests/main-integration.test.ts` with **59 integration tests** covering all private functions in `main.ts`:
+
+- **renderDocumentList**: loading state, empty state, document rendering, untitled markers, new doc button, duplicate, delete (with confirm)
+- **openEditor**: document fetch, status bar, title input, collaboration startup, share/permission badges, readonly mode, initial save behavior, share token access, error handling, editor wrapper
+- **route() cleanup**: auto-save timer clearing, collaboration disconnect, remote cursor cleanup, share panel cleanup, doAutoSave flush
+- **Auto-save**: debounce scheduling, JSON change detection, save status updates, error handling
+- **Collaboration callbacks**: connection state indicator, remote user list rendering
+- **Title input**: debounced save, "Untitled" default
+- **Version restore**: setDocument call, title update, lastSavedJSON reset, toast notification
+- **User profile**: profile bar rendering with color dot and display name
+- **startNameEdit**: inline editing, Enter/Escape keys, empty name validation, updateMe API call, blur commit, error handling
+- **onUpdate**: remote cursor refresh
+
+Key testing pattern discovered: `vi.hoisted()` is required to create DOM elements before module imports (since `vi.mock()` and static imports are hoisted above inline code). Module-level state persists across tests, requiring careful cleanup via navigation to `#/` between test phases.
+=== Agent run completed successfully at Sun Feb  8 03:52:26 PM UTC 2026 ===

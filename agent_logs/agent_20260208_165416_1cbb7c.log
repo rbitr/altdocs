@@ -1,0 +1,18 @@
+=== Starting agent run at Sun Feb  8 04:54:16 PM UTC 2026 on commit 1cbb7c ===
+Task 042 is complete. Here's a summary of what was done:
+
+## Task 042: Fix Void Block Backspace Splice Bug + OT Convergence
+
+### Bug Fix
+- **editor.ts:490**: Replaced direct `this.doc.blocks.splice()` with a proper `delete_block` operation via `applyLocal()`. This was the last remaining path where void block deletion bypassed the OT system, causing document divergence in collaborative sessions.
+
+### OT Convergence Fix
+- **set_indent, set_image, set_line_spacing**: Added priority-based conflict resolution for concurrent same-type operations on the same block. The priority operation (a) wins — the non-priority transform adopts a's value to ensure convergence.
+
+### Tests Added (32 new)
+- 2 editor tests verifying `onOperation` callback fires with `delete_block` for HR and image void blocks
+- 30 OT convergence tests covering all cross-combinations of `set_indent`, `set_image`, and `set_line_spacing` against each other and core operations (insert_text, split_block, merge_block, insert_block, delete_block, change_block_type)
+
+### Follow-up Task Created
+- **Task 043**: Fix the same convergence issue in `change_block_type` and `change_block_alignment` (pre-existing, same pattern)
+=== Agent run completed successfully at Sun Feb  8 05:07:37 PM UTC 2026 ===

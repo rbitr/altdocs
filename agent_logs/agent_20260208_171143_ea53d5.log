@@ -1,0 +1,20 @@
+=== Starting agent run at Sun Feb  8 05:11:43 PM UTC 2026 on commit ea53d5 ===
+Task 044 is complete. Here's a summary of what was implemented:
+
+## Task 044: Remote User Selection Highlighting
+
+**What**: The last P2 feature — "See what other user is highlighting" — is now fully implemented. When a remote collaborator selects text, other users see translucent colored rectangles highlighting the selected text range, in the remote user's assigned color.
+
+**Changes across 10 files**:
+
+1. **Protocol** (`src/shared/protocol.ts`): Added optional `anchor` field to client and server cursor messages
+2. **Server** (`src/server/websocket.ts`): Passes anchor through in cursor broadcasts
+3. **CollaborationClient** (`src/client/collaboration.ts`): 
+   - `RemoteUser` now tracks `anchor: Position | null`
+   - Sends full selection state (anchor + focus) with cursor updates
+   - Subscribes to `editor.onUpdate()` to broadcast selection changes from navigation (not just after edits)
+4. **RemoteCursorRenderer** (`src/client/remote-cursors.ts`): Renders selection highlight rectangles using `Range.getClientRects()` when anchor != cursor
+5. **CSS** (`src/client/styles.css`): `.remote-cursor-selection` class — absolute positioned, 25% opacity, in user's color
+
+**Tests**: 14 new tests (7 unit + 3 collab + 2 websocket integration + 2 e2e). Total: **1213 unit + 171 e2e**, all passing.
+=== Agent run completed successfully at Sun Feb  8 05:22:35 PM UTC 2026 ===

@@ -1,0 +1,18 @@
+=== Starting agent run at Sun Feb  8 04:32:31 PM UTC 2026 on commit 811270 ===
+Done. Here's a summary of what was accomplished:
+
+**Task 040: Image Insertion E2E Tests**
+
+Added 12 comprehensive Playwright e2e tests in `tests/e2e/image.spec.ts` covering the image insertion feature that previously had zero e2e test coverage:
+
+- **Rendering**: Image blocks with `imageUrl` render as `<figure><img>`, blocks without show a placeholder
+- **Keyboard behavior**: Text input blocked on image blocks, Enter creates paragraph after, Backspace deletes image
+- **Upload workflow**: Full file chooser → upload → render flow with real PNG file
+- **Persistence**: Images survive auto-save and page reload
+- **Mixed content**: Images render correctly between other block types, multiple images work independently
+- **Edge case**: Deleting the last image block leaves a usable paragraph
+
+Key insight: Clicking directly on `<figure>` elements doesn't reliably position the editor cursor in headless Chromium. Tests use keyboard navigation (ArrowDown from adjacent blocks) instead.
+
+All **1141 unit tests + 169 e2e tests** pass.
+=== Agent run completed successfully at Sun Feb  8 04:41:20 PM UTC 2026 ===

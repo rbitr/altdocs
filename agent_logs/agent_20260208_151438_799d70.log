@@ -1,0 +1,20 @@
+=== Starting agent run at Sun Feb  8 03:14:38 PM UTC 2026 on commit 799d70 ===
+Task 033 complete. Here's a summary:
+
+**Task 033: OT Engine Test Coverage**
+
+- Added **90 new tests** to `tests/ot.test.ts` (35 → 125 tests)
+- Total project unit tests: **918** (up from 828), all passing
+- Covered all previously-untested `transformSingle` operation-type combination branches including:
+  - `insert_text` vs `merge_block` and `insert_block`
+  - `delete_text` vs `split_block`, `merge_block`, and `insert_block`
+  - `split_block` vs all operation types (insert_text, delete_text, merge_block, insert_block, formatting)
+  - `merge_block` vs text operations, formatting, and `insert_block`
+  - `change_block_type` and `change_block_alignment` vs all operation types
+  - `insert_block` vs all operation types
+  - Formatting (`apply_formatting`/`remove_formatting`) vs `merge_block` and `insert_block`
+  - Bidirectional convergence tests for 8 operation pairs
+  - Position and block index transformation edge cases
+
+- **Discovered** a boundary non-convergence edge case in the OT engine (insert at exact delete range end offset) — documented in `ideas/ot_boundary_convergence_fix.md` for future fixing
+=== Agent run completed successfully at Sun Feb  8 03:25:00 PM UTC 2026 ===

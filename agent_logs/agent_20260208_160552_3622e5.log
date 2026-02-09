@@ -1,0 +1,44 @@
+=== Starting agent run at Sun Feb  8 04:05:52 PM UTC 2026 on commit 3622e5 ===
+Task 037 is complete. Here's what was implemented:
+
+**Task 037: Image Insertion**
+
+**Model changes:**
+- Added `'image'` to `BlockType` union
+- Added optional `imageUrl?: string` field to `Block` interface
+- Added `SetImageOp` operation type (`set_image`)
+- `applySetImage` applies the operation
+- `cloneBlock` preserves `imageUrl` field
+
+**OT:**
+- `set_image` uses `transformBlockIndex` (same pattern as `set_indent`, `change_block_type`)
+
+**Validation:**
+- `image` added to valid block types
+- `imageUrl` validated as string if present
+
+**Server:**
+- New `POST /api/uploads` endpoint in `src/server/uploads.ts`
+- Manual multipart/form-data parser (no external dependency)
+- Validates MIME types (JPEG, PNG, GIF, WebP)
+- 5MB file size limit
+- Files stored in `data/uploads/` with random hex filenames
+- Vite dev proxy for `/uploads` path
+
+**Renderer:**
+- Image blocks render as `<figure class="image-block">` with `<img>` child
+- No-URL images show placeholder div
+- CSS styles for max-width, centering, placeholder
+
+**Editor:**
+- Image blocks treated as void (like HR): no text input, Enter/Backspace behavior
+- `insertImage()` method: file picker → create block → upload → set URL
+- Graceful fallback: removes image block if upload fails
+
+**Toolbar:**
+- Image button (🖼) in insert group
+
+**Tests:**
+- 39 new tests covering model, OT, validation, renderer, editor, and upload API
+- Total: 1067 unit tests, all passing
+=== Agent run completed successfully at Sun Feb  8 04:17:20 PM UTC 2026 ===

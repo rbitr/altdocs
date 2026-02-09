@@ -1,0 +1,25 @@
+=== Starting agent run at Sun Feb  8 01:47:24 PM UTC 2026 on commit 53b4d8 ===
+Task 024 is complete. Here's a summary of what was implemented:
+
+## Task 024: WebSocket Server + OT Engine
+
+### OT Engine (`src/shared/ot.ts`)
+- **`transformOperation(a, b)`**: Returns `[a', b']` satisfying the convergence property: `apply(apply(S, a), b') === apply(apply(S, b), a')`
+- **`transformSingle(op, other)`**: Server-side transform where `other` has priority (already applied)
+- **`transformOperationAgainstHistory(op, history)`**: Transforms an operation against a sequence of already-applied operations
+- Handles all 9 operation types: insert_text, delete_text, apply_formatting, remove_formatting, split_block, merge_block, change_block_type, change_block_alignment, insert_block
+- Priority-based tie-breaking for same-position inserts
+- Delete-wins semantics when an insert falls strictly within a concurrent delete range
+
+### WebSocket Server (`src/server/websocket.ts`)
+- **CollaborationServer** class attaches to the existing HTTP server
+- Document rooms with version counters and operation history (max 1000 ops)
+- Session-based authentication via token query parameter
+- Join/leave with presence notifications (`user_joined`, `user_left`)
+- Operation handling with server-side OT transformation, acknowledgment, and broadcast
+- Cursor position sharing between collaborating users
+
+### Tests
+- **35 OT tests**: Convergence verification for all major operation pairs, edge cases
+- **16 WebSocket tests**: Authentication, room management, operation flow, cursor sharing
+=== Agent run completed successfully at Sun Feb  8 02:04:44 PM UTC 2026 ===

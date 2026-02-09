@@ -1,0 +1,24 @@
+=== Starting agent run at Sun Feb  8 01:27:53 PM UTC 2026 on commit 3eb280 ===
+Task 022 is complete. Here's what was implemented:
+
+**Task 022: Version History** — implemented full version history with view and restore support:
+
+**Database layer** (`src/server/db.ts`):
+- `document_versions` table with auto-incrementing version numbers
+- `createVersion`, `listVersions`, `getVersion`, `deleteVersions` functions
+- Auto-versioning in `updateDocument` only when title or content actually changes
+- 50-version retention limit per document with automatic pruning
+- Cascade delete: deleting a document removes all its versions
+
+**API** (`src/server/api.ts`):
+- `GET /api/documents/:id/versions` — list versions (newest first, no content)
+- `GET /api/documents/:id/versions/:version` — get specific version with content
+- `POST /api/documents/:id/versions/:version/restore` — restore a version
+
+**Client** (`src/client/version-panel.ts`, `api-client.ts`, `toolbar.ts`, `main.ts`):
+- `VersionPanel` component: modal overlay, version list, restore per version
+- Toolbar button to open version history
+- Restore updates editor content + title, shows toast notification
+
+**Tests**: 10 DB unit tests, 7 API tests, 8 e2e tests — all 483 unit + 123 e2e tests passing.
+=== Agent run completed successfully at Sun Feb  8 01:37:08 PM UTC 2026 ===

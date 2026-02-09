@@ -1,0 +1,21 @@
+=== Starting agent run at Sat Feb  7 10:05:50 PM UTC 2026 on commit 793a91 ===
+Task 017 complete. Here's a summary of what was done:
+
+**Task 017: Fill Unit Test Coverage Gaps**
+
+Added 45 new unit tests for two previously-untested modules:
+
+- **`cursor-renderer.ts`** — 26 tests covering:
+  - `resolvePosition`: start/middle/end of blocks, multi-run blocks, run boundaries, list items, headings, blockquotes, horizontal rules, empty blocks, out-of-range indices, overflow offsets
+  - `resolveDocumentPosition`: single/multi-run blocks, accumulated offsets, list items, block fallback, span element resolution, non-existent block IDs, nodes outside container
+
+- **`api-client.ts`** — 19 tests covering:
+  - All 6 API functions: `fetchDocumentList`, `fetchDocument`, `saveDocument`, `createNewDocument`, `deleteDocumentById`, `duplicateDocument`
+  - Error handling for non-ok responses and network errors
+  - URL encoding of special characters in document IDs
+  - Timeout setup and cleanup behavior via AbortController
+
+**Total unit tests: 361 → 406** | All 406 pass cleanly.
+
+Also created 5 follow-up task files (018-022) for remaining P2 features: font size/family, text/highlight color, responsive layout, print styles, and version history.
+=== Agent run completed successfully at Sat Feb  7 10:13:17 PM UTC 2026 ===

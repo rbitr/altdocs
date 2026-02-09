@@ -1,0 +1,16 @@
+=== Starting agent run at Sat Feb  7 09:20:47 PM UTC 2026 on commit 9fbfc3 ===
+Task 011 is complete. Here's a summary of what was done:
+
+**Task 011: Persistent Storage Migration**
+
+- **Problem**: Storage was using an in-memory Map backed by a JSON file (`data/documents.json`), which the human flagged as unacceptable
+- **Root cause**: `better-sqlite3` couldn't install because `make`/`gcc` weren't available
+- **Fix**: Installed `build-essential` (provides make/gcc), then installed `better-sqlite3` and rewrote `db.ts` to use proper SQLite
+- **Key details**:
+  - SQLite database at `data/altdocs.db` with WAL journal mode
+  - Single `documents` table with `id`, `title`, `content`, `created_at`, `updated_at`
+  - Same function signatures — zero changes needed in the API layer
+  - Tests use `useMemoryDb()` for isolation (in-memory SQLite)
+- **Tests**: All 284 unit tests + 24 e2e tests pass
+- **Commit**: `d015b6e` on `claude_dev` branch
+=== Agent run completed successfully at Sat Feb  7 09:24:38 PM UTC 2026 ===

@@ -72,3 +72,13 @@
 - Print-friendly rendering
 - Responsive layout for different screen sizes
 - Loading states and error handling UI
+
+### Collaboration polish
+- See what other user is highlighting
+
+## P3 - Feature extension (half baked ideas, please expand in /ideas)
+- Table support
+- Margins and indentation
+- Bullet points
+- Image insertion
+- Line spacing

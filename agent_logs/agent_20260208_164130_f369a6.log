@@ -1,0 +1,15 @@
+=== Starting agent run at Sun Feb  8 04:41:30 PM UTC 2026 on commit f369a6 ===
+Task 041 is complete. Here's a summary of what was done:
+
+**Task 041: Add delete_block operation and fix void block deletion OT bug**
+
+**Problem**: Void block (HR/image) deletion via Backspace was bypassing the OT operation system by directly mutating `doc.blocks` with `splice()`. This caused document state divergence between collaborating users since the deletion was never broadcast.
+
+**Solution**:
+1. **New `delete_block` operation** — `{ type: 'delete_block', blockIndex: number }` added to the operation system with proper application logic (removes block, or converts to empty paragraph if it's the last block)
+2. **Full OT transform support** — Added transforms for `delete_block` against all 12 other operation types, and all other operations against `delete_block`. Key helpers: `transformPositionAgainstDeleteBlock`, `transformDeleteBlock`, and `delete_block` case in `transformBlockIndex`
+3. **Editor fixes** — Both `handleBackspace` void block path and image upload failure cleanup now use `delete_block` via `applyLocal()` instead of direct `splice()`
+4. **Safety clamp** — Added `Math.max(0, ...)` to `transformBlockIndex` for `merge_block` to prevent negative block indices
+
+**Tests**: 24 new tests (6 model + 18 OT), all 1165 unit tests + 169 e2e tests passing.
+=== Agent run completed successfully at Sun Feb  8 04:54:06 PM UTC 2026 ===

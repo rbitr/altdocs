@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "./dist/server",
+    "lib": ["ES2022"]
+  },
+  "include": ["src/server/**/*.ts", "src/shared/**/*.ts"]
+}

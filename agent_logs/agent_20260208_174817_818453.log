@@ -1,0 +1,24 @@
+=== Starting agent run at Sun Feb  8 05:48:17 PM UTC 2026 on commit 818453 ===
+Task 047 is complete. Here's a summary of what was done:
+
+**Task 047: Add Table E2E Tests + Fix clearActiveTableCell Bug**
+
+**New tests** (13 e2e tests in `tests/e2e/table.spec.ts`):
+- Insert table via toolbar button
+- Click cell to activate it (verify `.active-cell` class)
+- Type text into table cells
+- Backspace deletes text from cells
+- Tab navigates to next cell (including row wrapping)
+- Shift+Tab navigates to previous cell
+- `+ Row` button adds a row
+- `+ Col` button adds a column
+- Table persists after save and reload
+- Undo reverts table cell text input
+- Pre-existing table data renders correctly (3x3 with headers + surrounding paragraphs)
+- Clicking outside table deactivates cell
+- Control buttons (`+ Row`, `+ Col`) are visible
+
+**Bug fix** in `src/client/editor.ts`: `clearActiveTableCell()` was only clearing the internal state but not removing the `.active-cell` CSS class from the DOM, causing the visual highlight to persist until the next full re-render. Fixed by removing the class immediately when clearing.
+
+**All tests pass**: 1290 unit tests + 184 e2e tests, TypeScript compiles cleanly.
+=== Agent run completed successfully at Sun Feb  8 05:55:12 PM UTC 2026 ===

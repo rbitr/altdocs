@@ -1,0 +1,21 @@
+=== Starting agent run at Sun Feb  8 01:24:18 PM UTC 2026 on commit 825f3f ===
+Task 021 (Print-Friendly Rendering) is complete. Here's a summary of what was done:
+
+**Changes:**
+- **`src/client/styles.css`** — Added `@media print` block with rules to:
+  - Set 2cm page margins via `@page`
+  - Hide toolbar, status bar, toast notifications, shortcuts overlay, loading indicators, and back link
+  - Display document title prominently (1.75rem, bold, no border)
+  - Strip editor chrome (no border, background, or min-height)
+  - Headings avoid `page-break-after` / `break-after`
+  - List items, blockquotes, and code blocks avoid `break-inside`
+  - Code blocks use `pre-wrap` for print-friendly wrapping
+  - HR prints with visible gray border
+  - Document list hides action buttons and new-doc button
+  - Paragraphs have `orphans: 3; widows: 3`
+  - All animations/transitions disabled
+
+- **`tests/e2e/print.spec.ts`** — 10 new e2e tests using `page.emulateMedia({ media: 'print' })` verifying toolbar hiding, status bar hiding, title visibility, editor content visibility, border/background/min-height removal, heading page-break rules, and document list print cleanup.
+
+**Test results:** 466 unit tests + 115 e2e tests all passing.
+=== Agent run completed successfully at Sun Feb  8 01:27:43 PM UTC 2026 ===
